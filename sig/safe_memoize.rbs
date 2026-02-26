@@ -1,0 +1,12 @@
+module SafeMemoize
+  VERSION: String
+
+  def self.prepended: (Class base) -> void
+
+  def reset_memo: (Symbol method_name) -> void
+  def reset_all_memos: () -> void
+
+  module ClassMethods
+    def memoize: (Symbol | String method_name) -> void
+  end
+end
