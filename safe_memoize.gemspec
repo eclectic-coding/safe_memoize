@@ -4,6 +4,7 @@ require_relative 'lib/safe_memoize/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'safe_memoize'
+
   spec.version = SafeMemoize::VERSION
   spec.authors = ['Chuck Smith']
   spec.email = ['eclectic-coding@users.noreply.github.com']
@@ -16,7 +17,7 @@ Gem::Specification.new do |spec|
 
   spec.metadata['allowed_push_host'] = 'https://rubygems.org'
   spec.metadata['homepage_uri'] = spec.homepage
-  spec.metadata['source_code_uri'] = 'https://github.com/eclectic-coding/safe_memoize'
+  spec.metadata['source_code_uri'] = 'https://github.com/eclectic-coding/safe_memoize/tree/main'
   spec.metadata['changelog_uri'] = 'https://github.com/eclectic-coding/safe_memoize/blob/main/CHANGELOG.md'
 
   # Specify which files should be added to the gem when it is released.
