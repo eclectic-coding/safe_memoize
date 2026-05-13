@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Verify tag matches gem version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          expected_version="${RELEASE_TAG#v}"
+          actual_version="$(bundle exec ruby -e 'require_relative "lib/safe_memoize/version"; print SafeMemoize::VERSION')"
+
+          if [ "$actual_version" != "$expected_version" ]; then
+            echo "Tag $expected_version does not match gem version $actual_version"
+            exit 1
+          fi
+
+      - name: Run test suite
+        run: bundle exec rake
+
+      - name: Build gem artifact
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p pkg
+          gem build safe_memoize.gemspec --output "pkg/safe_memoize-${version}.gem"
+
+      - name: Check whether the gem version is already on RubyGems
+        id: rubygems
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+
+          if ruby -rjson -ropen-uri -e 'version = ARGV.fetch(0); versions = JSON.parse(URI.open("https://rubygems.org/api/v1/versions/safe_memoize.json", &:read)); exit(versions.any? { |item| item["number"] == version } ? 0 : 1)' "$version"; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip RubyGems publish for existing versions
+        if: steps.rubygems.outputs.already_published == 'true'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: echo "RubyGems already has version ${RELEASE_TAG#v}; skipping gem push."
+
+      - name: Publish gem to RubyGems
+        if: steps.rubygems.outputs.already_published != 'true'
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          gem push "pkg/safe_memoize-${version}.gem"
+
+      - name: Generate GitHub release notes from CHANGELOG
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          bundle exec ruby bin/release_notes "$version" "${RUNNER_TEMP}/release_notes.md"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: ${{ runner.temp }}/release_notes.md
+          files: pkg/*.gem
+          tag_name: ${{ github.ref_name }}
+
