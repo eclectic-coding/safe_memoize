@@ -21,6 +21,12 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Thread-safe via double-check locking
 - Zero runtime dependencies
 - Simple `prepend` + `memoize` API
+- Preserves public, protected, and private method visibility
+- Supports targeted cache invalidation by argument combination
+- Includes a `memoized?` helper for cache inspection
+- Includes a `memo_count` helper for cache size stats
+- Includes a `memo_keys` helper for inspecting cached signatures
+- Includes a `memo_values` helper for inspecting cached signatures and values
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -94,12 +100,51 @@ class Config
 end
 ```
 
+### Works with private methods
+
+```ruby
+class TokenProvider
+  prepend SafeMemoize
+
+  def bearer_token
+    token
+  end
+
+  private
+
+  def token
+    fetch_token_from_service
+  end
+  memoize :token
+end
+```
+
 ### Cache reset
 
 ```ruby
 obj = MyService.new
-obj.reset_memo(:current_user)  # Clears cache for one method
-obj.reset_all_memos            # Clears all memoized values
+obj.reset_memo(:current_user)                    # Clears all cached entries for one method
+obj.reset_memo(:find_user, 42)                  # Clears only the cached call for find_user(42)
+obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword combination
+obj.reset_all_memos                             # Clears all memoized values
+```
+
+### Cache inspection
+
+```ruby
+obj = MyService.new
+
+obj.memoized?(:current_user)              # => false
+obj.current_user
+obj.memoized?(:current_user)              # => true
+
+obj.memoized?(:search, "ruby", page: 2)  # Checks one cached argument combination
+obj.memo_count                            # Total cached entries for this instance
+obj.memo_count(:search)                   # Cached entries for one method
+obj.memo_keys                             # All cached signatures with method, args, kwargs
+obj.memo_keys(:search)                    # Cached signatures for one method
+obj.memo_values                           # Cached signatures and values for all methods
+obj.memo_values(:search)                  # Cached signatures and values for one method
 ```
 
 ## How It Works
