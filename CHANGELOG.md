@@ -3,6 +3,7 @@
 - Preserve public, protected, and private visibility for memoized methods
 - Allow reset_memo to clear one cached argument combination or all entries for a method
 - Add a memoized? helper for checking whether a method call is already cached
+- Add a memo_count helper for inspecting cache size per instance or method
 
 ## [0.1.1] - 2026-05-13
 

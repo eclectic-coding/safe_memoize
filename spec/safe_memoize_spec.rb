@@ -473,6 +473,93 @@ RSpec.describe SafeMemoize do
         expect(obj.memoized?(:with_block)).to be(false)
         expect(obj.call_count).to eq(1)
       end
+
+      it "returns zero when no memoized values have been cached yet" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value
+            1
+          end
+
+          memoize :value
+        end
+
+        obj = klass.new
+
+        expect(obj.memo_count).to eq(0)
+        expect(obj.memo_count(:value)).to eq(0)
+      end
+
+      it "returns the global memoized entry count" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def a
+            "a"
+          end
+
+          def b(id)
+            "b-#{id}"
+          end
+
+          memoize :a
+          memoize :b
+        end
+
+        obj = klass.new
+
+        obj.a
+        obj.b(1)
+        obj.b(2)
+
+        expect(obj.memo_count).to eq(3)
+      end
+
+      it "returns the per-method memoized entry count" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def find(id)
+            "item-#{id}"
+          end
+
+          memoize :find
+        end
+
+        obj = klass.new
+
+        obj.find(1)
+        obj.find(2)
+
+        expect(obj.memo_count(:find)).to eq(2)
+        expect(obj.memo_count("find")).to eq(2)
+        expect(obj.memo_count(:missing)).to eq(0)
+      end
+
+      it "tracks count changes after targeted and full resets" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(v)
+            v * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+
+        obj.compute(1)
+        obj.compute(2)
+        expect(obj.memo_count(:compute)).to eq(2)
+
+        obj.reset_memo(:compute, 1)
+        expect(obj.memo_count(:compute)).to eq(1)
+
+        obj.reset_all_memos
+        expect(obj.memo_count).to eq(0)
+      end
     end
 
     context "edge cases" do

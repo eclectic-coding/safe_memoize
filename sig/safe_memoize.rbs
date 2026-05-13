@@ -4,6 +4,8 @@ module SafeMemoize
   def self.prepended: (Class base) -> void
 
   def memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
+  def memo_count: () -> Integer
+  def memo_count: (Symbol | String method_name) -> Integer
   def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
   def reset_all_memos: () -> void
 
