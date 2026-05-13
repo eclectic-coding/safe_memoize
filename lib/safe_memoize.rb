@@ -58,65 +58,43 @@ module SafeMemoize
 
   def memoized?(method_name, *args, **kwargs, &block)
     return false if block
-    return false unless defined?(@__safe_memo_cache__)
 
     cache_key = safe_memo_cache_key(method_name, args, kwargs)
 
-    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
-      @__safe_memo_mutex__.synchronize do
-        @__safe_memo_cache__.key?(cache_key)
-      end
-    else
-      @__safe_memo_cache__.key?(cache_key)
+    with_memo_lock do
+      cache = memo_cache_or_nil
+      next false unless cache
+
+      cache.key?(cache_key)
     end
   end
 
   def memo_count(*method_name)
-    return 0 unless defined?(@__safe_memo_cache__)
-
     scoped_method = safe_memo_scoped_method(method_name)
 
-    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
-      @__safe_memo_mutex__.synchronize do
-        safe_memo_count_for(scoped_method)
-      end
-    else
+    with_memo_lock do
       safe_memo_count_for(scoped_method)
     end
   end
 
   def memo_keys(*method_name)
-    return [] unless defined?(@__safe_memo_cache__)
-
     scoped_method = safe_memo_scoped_method(method_name)
 
-    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
-      @__safe_memo_mutex__.synchronize do
-        safe_memo_keys_for(scoped_method)
-      end
-    else
+    with_memo_lock do
       safe_memo_keys_for(scoped_method)
     end
   end
 
   def memo_values(*method_name)
-    return [] unless defined?(@__safe_memo_cache__)
-
     scoped_method = safe_memo_scoped_method(method_name)
 
-    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
-      @__safe_memo_mutex__.synchronize do
-        safe_memo_values_for(scoped_method)
-      end
-    else
+    with_memo_lock do
       safe_memo_values_for(scoped_method)
     end
   end
 
   def reset_memo(method_name, *args, **kwargs)
     method_name = method_name.to_sym
-
-    return unless defined?(@__safe_memo_cache__)
 
     matcher =
       if args.empty? && kwargs.empty?
@@ -126,21 +104,16 @@ module SafeMemoize
         ->(key) { key == cache_key }
       end
 
-    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
-      @__safe_memo_mutex__.synchronize do
-        @__safe_memo_cache__.delete_if { |key, _| matcher.call(key) }
-      end
-    else
-      @__safe_memo_cache__.delete_if { |key, _| matcher.call(key) }
+    with_memo_lock do
+      cache = memo_cache_or_nil
+      next unless cache
+
+      cache.delete_if { |key, _| matcher.call(key) }
     end
   end
 
   def reset_all_memos
-    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
-      @__safe_memo_mutex__.synchronize do
-        @__safe_memo_cache__ = {}
-      end
-    else
+    with_memo_lock do
       @__safe_memo_cache__ = {}
     end
   end
@@ -153,34 +126,52 @@ module SafeMemoize
     method_name.first&.to_sym
   end
 
-  def safe_memo_count_for(method_name)
-    cache = @__safe_memo_cache__
-    return 0 unless cache
-    return cache.length unless method_name
+  def with_memo_lock
+    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
+      @__safe_memo_mutex__.synchronize { yield }
+    else
+      yield
+    end
+  end
 
-    cache.count { |key, _| key[0] == method_name }
+  def memo_cache_or_nil
+    return nil unless defined?(@__safe_memo_cache__)
+
+    @__safe_memo_cache__
+  end
+
+  def memo_entries_for(method_name)
+    cache = memo_cache_or_nil
+    return [] unless cache
+
+    entries = cache.to_a
+    return entries unless method_name
+
+    entries.select { |(cache_key, _)| cache_key[0] == method_name }
+  end
+
+  def safe_memo_count_for(method_name)
+    memo_entries_for(method_name).length
   end
 
   def safe_memo_keys_for(method_name)
-    cache = @__safe_memo_cache__
-    return [] unless cache
-
-    keys = cache.keys
+    entries = memo_entries_for(method_name)
 
     if method_name
-      keys
-        .select { |key| key[0] == method_name }
-        .map { |(_, args, kwargs)| {args: args, kwargs: kwargs} }
+      entries.map do |(cache_key, _)|
+        _, args, kwargs = cache_key
+        {args: args, kwargs: kwargs}
+      end
     else
-      keys.map { |(name, args, kwargs)| {method: name, args: args, kwargs: kwargs} }
+      entries.map do |(cache_key, _)|
+        name, args, kwargs = cache_key
+        {method: name, args: args, kwargs: kwargs}
+      end
     end
   end
 
   def safe_memo_values_for(method_name)
-    cache = @__safe_memo_cache__
-    return [] unless cache
-
-    entries = cache.to_a
+    entries = memo_entries_for(method_name)
 
     if method_name
       entries
