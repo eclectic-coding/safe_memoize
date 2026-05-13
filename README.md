@@ -25,6 +25,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Supports targeted cache invalidation by argument combination
 - Includes a `memoized?` helper for cache inspection
 - Includes a `memo_count` helper for cache size stats
+- Includes a `memo_keys` helper for inspecting cached signatures
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -139,6 +140,8 @@ obj.memoized?(:current_user)              # => true
 obj.memoized?(:search, "ruby", page: 2)  # Checks one cached argument combination
 obj.memo_count                            # Total cached entries for this instance
 obj.memo_count(:search)                   # Cached entries for one method
+obj.memo_keys                             # All cached signatures with method, args, kwargs
+obj.memo_keys(:search)                    # Cached signatures for one method
 ```
 
 ## How It Works

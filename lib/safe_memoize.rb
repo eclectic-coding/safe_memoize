@@ -85,6 +85,20 @@ module SafeMemoize
     end
   end
 
+  def memo_keys(method_name = nil)
+    return [] unless defined?(@__safe_memo_cache__)
+
+    scoped_method = method_name&.to_sym
+
+    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
+      @__safe_memo_mutex__.synchronize do
+        safe_memo_keys_for(scoped_method)
+      end
+    else
+      safe_memo_keys_for(scoped_method)
+    end
+  end
+
   def reset_memo(method_name, *args, **kwargs)
     method_name = method_name.to_sym
 
@@ -123,6 +137,18 @@ module SafeMemoize
     return @__safe_memo_cache__.length unless method_name
 
     @__safe_memo_cache__.count { |key, _| key[0] == method_name }
+  end
+
+  def safe_memo_keys_for(method_name)
+    keys = @__safe_memo_cache__.keys
+
+    if method_name
+      keys
+        .select { |key| key[0] == method_name }
+        .map { |(_, args, kwargs)| {args: args, kwargs: kwargs} }
+    else
+      keys.map { |(name, args, kwargs)| {method: name, args: args, kwargs: kwargs} }
+    end
   end
 
   def safe_memo_cache_key(method_name, args, kwargs)

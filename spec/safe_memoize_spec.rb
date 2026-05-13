@@ -560,6 +560,111 @@ RSpec.describe SafeMemoize do
         obj.reset_all_memos
         expect(obj.memo_count).to eq(0)
       end
+
+      it "returns an empty list of keys when nothing is cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value
+            1
+          end
+
+          memoize :value
+        end
+
+        obj = klass.new
+
+        expect(obj.memo_keys).to eq([])
+        expect(obj.memo_keys(:value)).to eq([])
+      end
+
+      it "returns global cache keys with method, args, and kwargs" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def a
+            "a"
+          end
+
+          def lookup(id, locale:)
+            "#{id}-#{locale}"
+          end
+
+          memoize :a
+          memoize :lookup
+        end
+
+        obj = klass.new
+
+        obj.a
+        obj.lookup(7, locale: :en)
+
+        expect(obj.memo_keys).to eq(
+          [
+            {method: :a, args: [], kwargs: {}},
+            {method: :lookup, args: [7], kwargs: {locale: :en}}
+          ]
+        )
+      end
+
+      it "returns method-scoped keys with args and kwargs only" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def lookup(id, locale:)
+            "#{id}-#{locale}"
+          end
+
+          memoize :lookup
+        end
+
+        obj = klass.new
+
+        obj.lookup(7, locale: :en)
+        obj.lookup(7, locale: :fr)
+
+        expect(obj.memo_keys(:lookup)).to eq(
+          [
+            {args: [7], kwargs: {locale: :en}},
+            {args: [7], kwargs: {locale: :fr}}
+          ]
+        )
+        expect(obj.memo_keys("lookup")).to eq(
+          [
+            {args: [7], kwargs: {locale: :en}},
+            {args: [7], kwargs: {locale: :fr}}
+          ]
+        )
+      end
+
+      it "updates key inspection results after reset operations" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(value)
+            value * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+
+        obj.compute(1)
+        obj.compute(2)
+        expect(obj.memo_keys(:compute)).to eq(
+          [
+            {args: [1], kwargs: {}},
+            {args: [2], kwargs: {}}
+          ]
+        )
+
+        obj.reset_memo(:compute, 1)
+        expect(obj.memo_keys(:compute)).to eq([{args: [2], kwargs: {}}])
+
+        obj.reset_all_memos
+        expect(obj.memo_keys).to eq([])
+      end
     end
 
     context "edge cases" do
