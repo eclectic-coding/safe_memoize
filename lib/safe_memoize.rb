@@ -19,7 +19,7 @@ module SafeMemoize
           # Blocks bypass cache entirely — they aren't comparable
           return super(*args, **kwargs, &block) if block
 
-          cache_key = [method_name, args, kwargs]
+          cache_key = safe_memo_cache_key(method_name, args, kwargs)
 
           @__safe_memo_mutex__ ||= Mutex.new
 
@@ -56,6 +56,21 @@ module SafeMemoize
     end
   end
 
+  def memoized?(method_name, *args, **kwargs, &block)
+    return false if block
+    return false unless defined?(@__safe_memo_cache__)
+
+    cache_key = safe_memo_cache_key(method_name, args, kwargs)
+
+    if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
+      @__safe_memo_mutex__.synchronize do
+        @__safe_memo_cache__.key?(cache_key)
+      end
+    else
+      @__safe_memo_cache__.key?(cache_key)
+    end
+  end
+
   def reset_memo(method_name, *args, **kwargs)
     method_name = method_name.to_sym
 
@@ -65,7 +80,7 @@ module SafeMemoize
       if args.empty? && kwargs.empty?
         ->(key) { key[0] == method_name }
       else
-        cache_key = [method_name, args, kwargs]
+        cache_key = safe_memo_cache_key(method_name, args, kwargs)
         ->(key) { key == cache_key }
       end
 
@@ -86,5 +101,11 @@ module SafeMemoize
     else
       @__safe_memo_cache__ = {}
     end
+  end
+
+  private
+
+  def safe_memo_cache_key(method_name, args, kwargs)
+    [method_name.to_sym, args, kwargs]
   end
 end

@@ -339,6 +339,142 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "cache inspection" do
+      it "returns whether a zero-argument method has been memoized" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+
+          def initialize
+            @call_count = 0
+          end
+
+          def expensive
+            @call_count += 1
+            "result"
+          end
+
+          memoize :expensive
+        end
+
+        obj = klass.new
+
+        expect(obj.memoized?(:expensive)).to be(false)
+
+        obj.expensive
+
+        expect(obj.memoized?(:expensive)).to be(true)
+        expect(obj.call_count).to eq(1)
+      end
+
+      it "reports cached nil and false values as memoized" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :nil_count, :false_count
+
+          def initialize
+            @nil_count = 0
+            @false_count = 0
+          end
+
+          def returns_nil
+            @nil_count += 1
+            nil
+          end
+
+          def returns_false
+            @false_count += 1
+            false
+          end
+
+          memoize :returns_nil
+          memoize :returns_false
+        end
+
+        obj = klass.new
+
+        obj.returns_nil
+        obj.returns_false
+
+        expect(obj.memoized?(:returns_nil)).to be(true)
+        expect(obj.memoized?(:returns_false)).to be(true)
+      end
+
+      it "checks memoization per unique positional and keyword arguments" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def lookup(id, locale:)
+            "#{id}-#{locale}"
+          end
+
+          memoize :lookup
+        end
+
+        obj = klass.new
+
+        expect(obj.memoized?(:lookup, 7, locale: :en)).to be(false)
+
+        obj.lookup(7, locale: :en)
+
+        expect(obj.memoized?(:lookup, 7, locale: :en)).to be(true)
+        expect(obj.memoized?(:lookup, 7, locale: :fr)).to be(false)
+        expect(obj.memoized?(:lookup, 8, locale: :en)).to be(false)
+      end
+
+      it "returns false after a cached entry is reset" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(value)
+            value * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+        obj.compute(5)
+
+        expect(obj.memoized?(:compute, 5)).to be(true)
+
+        obj.reset_memo(:compute, 5)
+
+        expect(obj.memoized?(:compute, 5)).to be(false)
+      end
+
+      it "always returns false for block-based calls" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+
+          def initialize
+            @call_count = 0
+          end
+
+          def with_block(&block)
+            @call_count += 1
+            block.call
+          end
+
+          memoize :with_block
+        end
+
+        obj = klass.new
+
+        expect(obj.memoized?(:with_block) { "value" }).to be(false)
+
+        obj.with_block { "value" }
+
+        expect(obj.memoized?(:with_block) { "value" }).to be(false)
+        expect(obj.memoized?(:with_block)).to be(false)
+        expect(obj.call_count).to eq(1)
+      end
+    end
+
     context "edge cases" do
       it "preserves private visibility for memoized methods" do
         klass = Class.new do
