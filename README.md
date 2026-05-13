@@ -110,6 +110,41 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `bundle exec rspec` to run the tests. You can also run `bin/console` for an interactive prompt.
 
+GitHub Actions also runs the full `bundle exec rake` suite automatically for pull requests, manual workflow runs, and pushes to `main` via `.github/workflows/ci.yml`.
+
+## Releasing
+
+Releases are automated in two parts:
+
+1. Run `bin/release VERSION` locally to:
+   - update `lib/safe_memoize/version.rb`
+   - convert the current `## [Unreleased]` section in `CHANGELOG.md` into a dated release entry
+   - create the release commit and annotated tag
+2. Push the branch and tag to GitHub. The workflow in `.github/workflows/release.yml` will:
+   - run the test and lint suite
+   - build the gem
+   - push it to RubyGems when that version is not already published
+   - create a GitHub release using the matching section from `CHANGELOG.md`
+
+One-time setup:
+
+- add a `RUBYGEMS_API_KEY` repository secret in GitHub
+
+Typical release flow:
+
+```bash
+bundle exec rake
+bin/release 0.1.1
+git push origin HEAD
+git push origin v0.1.1
+```
+
+To preview the changelog/version update without changing anything, use:
+
+```bash
+bin/release 0.1.1 --dry-run
+```
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/eclectic-coding/safe_memoize.
