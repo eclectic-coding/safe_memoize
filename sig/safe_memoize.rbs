@@ -24,10 +24,17 @@ module SafeMemoize
   def safe_memo_scoped_method: (Array[untyped] method_name) -> Symbol?
   def with_memo_lock: { () -> untyped } -> untyped
   def memo_cache_or_nil: () -> Hash[memo_key, untyped]?
+  def memo_cache_hit?: (memo_key cache_key) -> bool
+  def memo_cache_read: (memo_key cache_key) -> untyped?
+  def memo_fetch_or_store: (memo_key cache_key) { () -> untyped } -> untyped
+  def memo_mutex!: () -> Mutex
+  def with_memo_cache: { (Hash[memo_key, untyped] cache) -> untyped } -> untyped?
+  def memo_matcher_for: (Symbol method_name, Array[untyped] args, Hash[Symbol, untyped] kwargs) -> ((memo_key) -> bool)
   def memo_entries_for: (Symbol? method_name) -> Array[memo_entry]
   def safe_memo_count_for: (Symbol? method_name) -> Integer
   def safe_memo_keys_for: (Symbol? method_name) -> Array[untyped]
   def safe_memo_values_for: (Symbol? method_name) -> Array[untyped]
+  def memo_projection: (memo_key cache_key, untyped value, include_method: bool, include_value: bool) -> Hash[Symbol, untyped]
   def safe_memo_cache_key: (Symbol | String method_name, Array[untyped] args, Hash[Symbol, untyped] kwargs) -> memo_key
 
   module ClassMethods
