@@ -26,6 +26,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Includes a `memoized?` helper for cache inspection
 - Includes a `memo_count` helper for cache size stats
 - Includes a `memo_keys` helper for inspecting cached signatures
+- Includes a `memo_values` helper for inspecting cached signatures and values
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -142,6 +143,8 @@ obj.memo_count                            # Total cached entries for this instan
 obj.memo_count(:search)                   # Cached entries for one method
 obj.memo_keys                             # All cached signatures with method, args, kwargs
 obj.memo_keys(:search)                    # Cached signatures for one method
+obj.memo_values                           # Cached signatures and values for all methods
+obj.memo_values(:search)                  # Cached signatures and values for one method
 ```
 
 ## How It Works

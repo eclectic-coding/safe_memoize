@@ -665,6 +665,111 @@ RSpec.describe SafeMemoize do
         obj.reset_all_memos
         expect(obj.memo_keys).to eq([])
       end
+
+      it "returns an empty list of values when nothing is cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value
+            1
+          end
+
+          memoize :value
+        end
+
+        obj = klass.new
+
+        expect(obj.memo_values).to eq([])
+        expect(obj.memo_values(:value)).to eq([])
+      end
+
+      it "returns global cache entries including values" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def a
+            "a"
+          end
+
+          def lookup(id, locale:)
+            "#{id}-#{locale}"
+          end
+
+          memoize :a
+          memoize :lookup
+        end
+
+        obj = klass.new
+
+        obj.a
+        obj.lookup(7, locale: :en)
+
+        expect(obj.memo_values).to eq(
+          [
+            {method: :a, args: [], kwargs: {}, value: "a"},
+            {method: :lookup, args: [7], kwargs: {locale: :en}, value: "7-en"}
+          ]
+        )
+      end
+
+      it "returns method-scoped entries including values" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(v)
+            v * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+
+        obj.compute(1)
+        obj.compute(2)
+
+        expect(obj.memo_values(:compute)).to eq(
+          [
+            {args: [1], kwargs: {}, value: 2},
+            {args: [2], kwargs: {}, value: 4}
+          ]
+        )
+        expect(obj.memo_values("compute")).to eq(
+          [
+            {args: [1], kwargs: {}, value: 2},
+            {args: [2], kwargs: {}, value: 4}
+          ]
+        )
+      end
+
+      it "updates value inspection results after reset operations" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(v)
+            v * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+
+        obj.compute(1)
+        obj.compute(2)
+        expect(obj.memo_values(:compute)).to eq(
+          [
+            {args: [1], kwargs: {}, value: 2},
+            {args: [2], kwargs: {}, value: 4}
+          ]
+        )
+
+        obj.reset_memo(:compute, 1)
+        expect(obj.memo_values(:compute)).to eq([{args: [2], kwargs: {}, value: 4}])
+
+        obj.reset_all_memos
+        expect(obj.memo_values).to eq([])
+      end
     end
 
     context "edge cases" do

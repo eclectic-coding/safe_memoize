@@ -5,6 +5,7 @@
 - Add a memoized? helper for checking whether a method call is already cached
 - Add a memo_count helper for inspecting cache size per instance or method
 - Add a memo_keys helper for inspecting cached argument signatures
+- Add a memo_values helper for inspecting cached signatures and their values
 
 ## [0.1.1] - 2026-05-13
 

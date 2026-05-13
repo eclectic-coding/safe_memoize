@@ -8,6 +8,8 @@ module SafeMemoize
   def memo_count: (Symbol | String method_name) -> Integer
   def memo_keys: () -> Array[untyped]
   def memo_keys: (Symbol | String method_name) -> Array[untyped]
+  def memo_values: () -> Array[untyped]
+  def memo_values: (Symbol | String method_name) -> Array[untyped]
   def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
   def reset_all_memos: () -> void
 
