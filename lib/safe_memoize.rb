@@ -12,6 +12,7 @@ module SafeMemoize
   module ClassMethods
     def memoize(method_name)
       method_name = method_name.to_sym
+      visibility = memoized_method_visibility(method_name)
 
       mod = Module.new do
         define_method(method_name) do |*args, **kwargs, &block|
@@ -38,9 +39,20 @@ module SafeMemoize
             end
           end
         end
+
+        send(visibility, method_name)
       end
 
       prepend mod
+    end
+
+    private
+
+    def memoized_method_visibility(method_name)
+      return :private if private_method_defined?(method_name)
+      return :protected if protected_method_defined?(method_name)
+
+      :public
     end
   end
 

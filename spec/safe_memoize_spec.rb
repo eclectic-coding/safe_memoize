@@ -219,6 +219,79 @@ RSpec.describe SafeMemoize do
     end
 
     context "edge cases" do
+      it "preserves private visibility for memoized methods" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+
+          def initialize
+            @call_count = 0
+          end
+
+          def reveal_twice
+            [secret, secret]
+          end
+
+          def call_secret_with_send
+            send(:secret)
+          end
+
+          private
+
+          def secret
+            @call_count += 1
+            "shh"
+          end
+
+          memoize :secret
+        end
+
+        obj = klass.new
+
+        expect(obj.reveal_twice).to eq(["shh", "shh"])
+        expect(obj.call_count).to eq(1)
+        expect(obj.call_secret_with_send).to eq("shh")
+        expect(obj.call_count).to eq(1)
+        expect(obj.respond_to?(:secret)).to be(false)
+        expect(obj.private_methods).to include(:secret)
+      end
+
+      it "preserves protected visibility for memoized methods" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+
+          def initialize
+            @call_count = 0
+          end
+
+          def same_token_as?(other)
+            [token, other.token]
+          end
+
+          protected
+
+          def token
+            @call_count += 1
+            "token"
+          end
+
+          memoize :token
+        end
+
+        a = klass.new
+        b = klass.new
+
+        expect(a.same_token_as?(b)).to eq(["token", "token"])
+        expect(a.same_token_as?(b)).to eq(["token", "token"])
+        expect(a.call_count).to eq(1)
+        expect(b.call_count).to eq(1)
+        expect(a.respond_to?(:token)).to be(false)
+        expect(a.protected_methods).to include(:token)
+      end
+
       it "passes blocks through without caching" do
         klass = Class.new do
           prepend SafeMemoize

@@ -21,6 +21,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Thread-safe via double-check locking
 - Zero runtime dependencies
 - Simple `prepend` + `memoize` API
+- Preserves public, protected, and private method visibility
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -91,6 +92,25 @@ class Config
     ENV["FEATURE_FLAG"] == "true"
   end
   memoize :enabled?
+end
+```
+
+### Works with private methods
+
+```ruby
+class TokenProvider
+  prepend SafeMemoize
+
+  def bearer_token
+    token
+  end
+
+  private
+
+  def token
+    fetch_token_from_service
+  end
+  memoize :token
 end
 ```
 

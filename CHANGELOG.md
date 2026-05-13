@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Preserve public, protected, and private visibility for memoized methods
+
 ## [0.1.1] - 2026-05-13
 
 - Add automated release tooling plus a GitHub Actions workflow for RubyGems publishing and GitHub releases
