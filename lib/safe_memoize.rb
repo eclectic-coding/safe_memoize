@@ -71,10 +71,10 @@ module SafeMemoize
     end
   end
 
-  def memo_count(method_name = nil)
+  def memo_count(*method_name)
     return 0 unless defined?(@__safe_memo_cache__)
 
-    scoped_method = method_name&.to_sym
+    scoped_method = safe_memo_scoped_method(method_name)
 
     if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
       @__safe_memo_mutex__.synchronize do
@@ -85,10 +85,10 @@ module SafeMemoize
     end
   end
 
-  def memo_keys(method_name = nil)
+  def memo_keys(*method_name)
     return [] unless defined?(@__safe_memo_cache__)
 
-    scoped_method = method_name&.to_sym
+    scoped_method = safe_memo_scoped_method(method_name)
 
     if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
       @__safe_memo_mutex__.synchronize do
@@ -99,10 +99,10 @@ module SafeMemoize
     end
   end
 
-  def memo_values(method_name = nil)
+  def memo_values(*method_name)
     return [] unless defined?(@__safe_memo_cache__)
 
-    scoped_method = method_name&.to_sym
+    scoped_method = safe_memo_scoped_method(method_name)
 
     if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
       @__safe_memo_mutex__.synchronize do
@@ -147,14 +147,25 @@ module SafeMemoize
 
   private
 
-  def safe_memo_count_for(method_name)
-    return @__safe_memo_cache__.length unless method_name
+  def safe_memo_scoped_method(method_name)
+    raise ArgumentError, "expected 0 or 1 arguments" if method_name.length > 1
 
-    @__safe_memo_cache__.count { |key, _| key[0] == method_name }
+    method_name.first&.to_sym
+  end
+
+  def safe_memo_count_for(method_name)
+    cache = @__safe_memo_cache__
+    return 0 unless cache
+    return cache.length unless method_name
+
+    cache.count { |key, _| key[0] == method_name }
   end
 
   def safe_memo_keys_for(method_name)
-    keys = @__safe_memo_cache__.keys
+    cache = @__safe_memo_cache__
+    return [] unless cache
+
+    keys = cache.keys
 
     if method_name
       keys
@@ -166,7 +177,10 @@ module SafeMemoize
   end
 
   def safe_memo_values_for(method_name)
-    entries = @__safe_memo_cache__.to_a
+    cache = @__safe_memo_cache__
+    return [] unless cache
+
+    entries = cache.to_a
 
     if method_name
       entries
