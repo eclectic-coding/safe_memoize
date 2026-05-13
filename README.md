@@ -22,6 +22,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Zero runtime dependencies
 - Simple `prepend` + `memoize` API
 - Preserves public, protected, and private method visibility
+- Supports targeted cache invalidation by argument combination
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -118,8 +119,10 @@ end
 
 ```ruby
 obj = MyService.new
-obj.reset_memo(:current_user)  # Clears cache for one method
-obj.reset_all_memos            # Clears all memoized values
+obj.reset_memo(:current_user)                    # Clears all cached entries for one method
+obj.reset_memo(:find_user, 42)                  # Clears only the cached call for find_user(42)
+obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword combination
+obj.reset_all_memos                             # Clears all memoized values
 ```
 
 ## How It Works

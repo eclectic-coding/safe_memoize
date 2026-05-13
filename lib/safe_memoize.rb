@@ -56,17 +56,25 @@ module SafeMemoize
     end
   end
 
-  def reset_memo(method_name)
+  def reset_memo(method_name, *args, **kwargs)
     method_name = method_name.to_sym
 
     return unless defined?(@__safe_memo_cache__)
 
+    matcher =
+      if args.empty? && kwargs.empty?
+        ->(key) { key[0] == method_name }
+      else
+        cache_key = [method_name, args, kwargs]
+        ->(key) { key == cache_key }
+      end
+
     if defined?(@__safe_memo_mutex__) && @__safe_memo_mutex__
       @__safe_memo_mutex__.synchronize do
-        @__safe_memo_cache__.delete_if { |key, _| key[0] == method_name }
+        @__safe_memo_cache__.delete_if { |key, _| matcher.call(key) }
       end
     else
-      @__safe_memo_cache__.delete_if { |key, _| key[0] == method_name }
+      @__safe_memo_cache__.delete_if { |key, _| matcher.call(key) }
     end
   end
 

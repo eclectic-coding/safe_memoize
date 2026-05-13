@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 - Preserve public, protected, and private visibility for memoized methods
+- Allow reset_memo to clear one cached argument combination or all entries for a method
 
 ## [0.1.1] - 2026-05-13
 

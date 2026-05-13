@@ -203,6 +203,127 @@ RSpec.describe SafeMemoize do
         expect(obj.b_count).to eq(1)
       end
 
+      it "reset_memo clears only the matching positional argument entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_log
+
+          def initialize
+            @call_log = []
+          end
+
+          def compute(value)
+            @call_log << value
+            value * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+
+        expect(obj.compute(1)).to eq(2)
+        expect(obj.compute(2)).to eq(4)
+        expect(obj.call_log).to eq([1, 2])
+
+        obj.reset_memo(:compute, 1)
+
+        expect(obj.compute(1)).to eq(2)
+        expect(obj.compute(2)).to eq(4)
+        expect(obj.call_log).to eq([1, 2, 1])
+      end
+
+      it "reset_memo clears only the matching keyword argument entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_log
+
+          def initialize
+            @call_log = []
+          end
+
+          def lookup(id, locale:)
+            @call_log << [id, locale]
+            "#{id}-#{locale}"
+          end
+
+          memoize :lookup
+        end
+
+        obj = klass.new
+
+        expect(obj.lookup(7, locale: :en)).to eq("7-en")
+        expect(obj.lookup(7, locale: :fr)).to eq("7-fr")
+        expect(obj.call_log).to eq([[7, :en], [7, :fr]])
+
+        obj.reset_memo(:lookup, 7, locale: :en)
+
+        expect(obj.lookup(7, locale: :en)).to eq("7-en")
+        expect(obj.lookup(7, locale: :fr)).to eq("7-fr")
+        expect(obj.call_log).to eq([[7, :en], [7, :fr], [7, :en]])
+      end
+
+      it "reset_memo without arguments clears all cached entries for the method" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_log
+
+          def initialize
+            @call_log = []
+          end
+
+          def lookup(id, locale:)
+            @call_log << [id, locale]
+            "#{id}-#{locale}"
+          end
+
+          memoize :lookup
+        end
+
+        obj = klass.new
+
+        expect(obj.lookup(7, locale: :en)).to eq("7-en")
+        expect(obj.lookup(7, locale: :fr)).to eq("7-fr")
+        expect(obj.call_log).to eq([[7, :en], [7, :fr]])
+
+        obj.reset_memo(:lookup)
+
+        expect(obj.lookup(7, locale: :en)).to eq("7-en")
+        expect(obj.lookup(7, locale: :fr)).to eq("7-fr")
+        expect(obj.call_log).to eq([[7, :en], [7, :fr], [7, :en], [7, :fr]])
+      end
+
+      it "ignores argument-specific resets when no matching cache entry exists" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_log
+
+          def initialize
+            @call_log = []
+          end
+
+          def compute(value)
+            @call_log << value
+            value * 2
+          end
+
+          memoize :compute
+        end
+
+        obj = klass.new
+
+        expect(obj.compute(1)).to eq(2)
+
+        obj.reset_memo(:compute, 2)
+
+        expect(obj.compute(1)).to eq(2)
+        expect(obj.call_log).to eq([1])
+      end
+
       it "reset_all_memos clears cache for all methods" do
         obj = klass.new
         obj.method_a
