@@ -10,6 +10,10 @@
   - `cache_stats_for(method_name)` for per-method statistics
   - `cache_hit_rate` and `cache_miss_rate` for performance analysis
   - `cache_metrics_reset` to clear collected metrics
+- Add manual cache key generation support
+  - `memoize_with_custom_key` to define custom cache key logic
+  - `clear_custom_keys` to remove custom key generators
+  - Support for complex and computed keys based on arguments
 
 ## [0.1.2] - 2026-05-13
 

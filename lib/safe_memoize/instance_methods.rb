@@ -9,5 +9,7 @@ module SafeMemoize
     include HooksMethods
     include CacheMetricsMethods
     include PublicMetricsMethods
+    include CustomKeyMethods
+    include PublicCustomKeyMethods
   end
 end

@@ -22,7 +22,7 @@ module SafeMemoize
           # Blocks bypass cache entirely — they aren't comparable
           return super(*args, **kwargs, &block) if block
 
-          cache_key = safe_memo_cache_key(method_name, args, kwargs)
+          cache_key = compute_cache_key(method_name, args, kwargs)
 
           # Fast path: check without lock
           if (record = memo_cache_record(cache_key))

@@ -9,6 +9,8 @@ require_relative "safe_memoize/inspection_methods"
 require_relative "safe_memoize/hooks_methods"
 require_relative "safe_memoize/cache_metrics_methods"
 require_relative "safe_memoize/public_metrics_methods"
+require_relative "safe_memoize/custom_key_methods"
+require_relative "safe_memoize/public_custom_key_methods"
 require_relative "safe_memoize/instance_methods"
 
 module SafeMemoize
