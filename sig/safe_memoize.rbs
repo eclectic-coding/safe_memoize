@@ -30,9 +30,14 @@ module SafeMemoize
      def memo_values: (*untyped method_name) -> Array[untyped]
      def on_memo_expire: { (memo_key cache_key, memo_record record) -> untyped } -> void
      def on_memo_evict: { (memo_key cache_key, memo_record record) -> untyped } -> void
-     def clear_memo_hooks: (Symbol? hook_type) -> void
-     def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
-     def reset_all_memos: () -> void
+    def clear_memo_hooks: (Symbol? hook_type) -> void
+    def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
+    def reset_all_memos: () -> void
+    def cache_stats: () -> Hash[Symbol, untyped]
+    def cache_stats_for: (Symbol | String method_name) -> Hash[Symbol, untyped]
+    def cache_hit_rate: () -> Float
+    def cache_miss_rate: () -> Float
+    def cache_metrics_reset: () -> void
 
     private
 
@@ -97,12 +102,24 @@ module SafeMemoize
      def _clear_memo_hooks: (Symbol? hook_type) -> void
    end
 
+   module CacheMetricsMethods
+     @__safe_memo_metrics__: Hash[memo_key, {hits: Integer, misses: Integer, total_time: Float}]?
+
+     private
+
+     def memo_metrics_store: () -> Hash[memo_key, {hits: Integer, misses: Integer, total_time: Float}]
+     def record_cache_hit: (Symbol method_name, Array[untyped] args) -> void
+     def record_cache_miss: (Symbol method_name, Array[untyped] args, Float computation_time) -> void
+     def _reset_cache_metrics: () -> void
+   end
+
    module InstanceMethods
      include PublicMethods
      include CacheStoreMethods
      include CacheRecordMethods
      include InspectionMethods
      include HooksMethods
+     include CacheMetricsMethods
    end
 end
 

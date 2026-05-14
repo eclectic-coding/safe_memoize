@@ -50,6 +50,7 @@ module SafeMemoize
         else
           value = yield
           @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: expires_at)
+
           value
         end
       end

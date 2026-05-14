@@ -7,5 +7,7 @@ module SafeMemoize
     include CacheRecordMethods
     include InspectionMethods
     include HooksMethods
+    include CacheMetricsMethods
+    include PublicMetricsMethods
   end
 end

@@ -26,10 +26,20 @@ module SafeMemoize
 
           # Fast path: check without lock
           if (record = memo_cache_record(cache_key))
+            record_cache_hit(method_name, args)
             return memo_record_value(record)
           end
 
-          memo_fetch_or_store(cache_key, expires_at: expires_at) { super(*args, **kwargs) }
+          # Cache miss - compute and store
+          start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          result = memo_fetch_or_store(cache_key, expires_at: expires_at) { super(*args, **kwargs) }
+          elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+
+          with_memo_lock do
+            record_cache_miss(method_name, args, elapsed_time)
+          end
+
+          result
         end
 
         send(visibility, method_name)
