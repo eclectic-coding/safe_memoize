@@ -772,6 +772,47 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "ttl expiration" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+
+          def initialize
+            @call_count = 0
+          end
+
+          def expensive
+            @call_count += 1
+            "result"
+          end
+
+          memoize :expensive, ttl: 0.01
+        end
+      end
+
+      it "expires memoized entries after the ttl and prunes inspection results" do
+        obj = klass.new
+
+        expect(obj.expensive).to eq("result")
+        expect(obj.memoized?(:expensive)).to be(true)
+        expect(obj.memo_count).to eq(1)
+        expect(obj.memo_keys).to eq([{method: :expensive, args: [], kwargs: {}}])
+        expect(obj.memo_values).to eq([{method: :expensive, args: [], kwargs: {}, value: "result"}])
+
+        sleep(0.02)
+
+        expect(obj.memoized?(:expensive)).to be(false)
+        expect(obj.memo_count).to eq(0)
+        expect(obj.memo_keys).to eq([])
+        expect(obj.memo_values).to eq([])
+
+        expect(obj.expensive).to eq("result")
+        expect(obj.call_count).to eq(2)
+      end
+    end
+
     context "edge cases" do
       it "preserves private visibility for memoized methods" do
         klass = Class.new do

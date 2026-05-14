@@ -1,5 +1,22 @@
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-14
+
+- Add optional TTL expiration support for memoized entries
+- Add cache invalidation/expiration hooks for custom handlers
+  - `on_memo_expire` hook fires when TTL entries expire
+  - `on_memo_evict` hook fires when manually resetting cache entries
+  - `clear_memo_hooks` to remove registered hooks
+- Add cache statistics and monitoring capabilities
+  - `cache_stats` for comprehensive cache metrics
+  - `cache_stats_for(method_name)` for per-method statistics
+  - `cache_hit_rate` and `cache_miss_rate` for performance analysis
+  - `cache_metrics_reset` to clear collected metrics
+- Add manual cache key generation support
+  - `memoize_with_custom_key` to define custom cache key logic
+  - `clear_custom_keys` to remove custom key generators
+  - Support for complex and computed keys based on arguments
+
 ## [0.1.2] - 2026-05-13
 
 - Preserve public, protected, and private visibility for memoized methods

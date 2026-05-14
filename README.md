@@ -27,6 +27,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Includes a `memo_count` helper for cache size stats
 - Includes a `memo_keys` helper for inspecting cached signatures
 - Includes a `memo_values` helper for inspecting cached signatures and values
+- Optional TTL expiration support for cached entries
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -128,6 +129,21 @@ obj.reset_memo(:find_user, 42)                  # Clears only the cached call fo
 obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword combination
 obj.reset_all_memos                             # Clears all memoized values
 ```
+
+### TTL expiration
+
+```ruby
+class QuoteService
+  prepend SafeMemoize
+
+  def current_quote
+    fetch_quote_from_api
+  end
+  memoize :current_quote, ttl: 60
+end
+```
+
+With a TTL, cached values expire automatically after the given number of seconds. The next call recomputes and refreshes the cache.
 
 ### Cache inspection
 
