@@ -55,4 +55,3 @@ module SafeMemoize
     end
   end
 end
-

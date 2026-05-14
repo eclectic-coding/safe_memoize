@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-
 module SafeMemoize
   module InstanceMethods
     include PublicMethods
@@ -9,4 +8,3 @@ module SafeMemoize
     include InspectionMethods
   end
 end
-

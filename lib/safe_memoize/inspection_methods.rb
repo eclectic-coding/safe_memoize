@@ -55,7 +55,7 @@ module SafeMemoize
     def memo_projection(cache_key, value, include_method:, include_value:)
       method_name, args, kwargs = cache_key
 
-      payload = { args: args, kwargs: kwargs }
+      payload = {args: args, kwargs: kwargs}
       payload[:method] = method_name if include_method
       payload[:value] = memo_record_value(value) if include_value
       payload
@@ -66,4 +66,3 @@ module SafeMemoize
     end
   end
 end
-

@@ -22,7 +22,7 @@ module SafeMemoize
     end
 
     def memo_record(value, expires_at:)
-      { value: value, expires_at: expires_at }
+      {value: value, expires_at: expires_at}
     end
 
     def memo_record_value(record)
@@ -43,4 +43,3 @@ module SafeMemoize
     end
   end
 end
-
