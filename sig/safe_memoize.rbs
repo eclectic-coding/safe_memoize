@@ -9,7 +9,7 @@ module SafeMemoize
 
   def self.prepended: (Class base) -> void
 
-  def memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
+  def memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) ?{ () -> untyped } -> bool
   def memo_count: () -> Integer
   def memo_count: (Symbol | String method_name) -> Integer
   def memo_keys: () -> Array[untyped]
