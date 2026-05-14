@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "safe_memoize/version"
+require_relative "safe_memoize/class_methods"
 
 module SafeMemoize
   class Error < StandardError; end
@@ -9,52 +10,6 @@ module SafeMemoize
     base.extend(ClassMethods)
   end
 
-  module ClassMethods
-    def memoize(method_name, ttl: nil)
-      method_name = method_name.to_sym
-      visibility = memoized_method_visibility(method_name)
-
-      ttl = if ttl.nil?
-        nil
-      else
-        ttl = Float(ttl)
-        raise ArgumentError, "ttl must be non-negative" if ttl < 0
-
-        ttl
-      end
-
-      expires_at = ttl && Process.clock_gettime(Process::CLOCK_MONOTONIC) + ttl
-
-      mod = Module.new do
-        define_method(method_name) do |*args, **kwargs, &block|
-          # Blocks bypass cache entirely — they aren't comparable
-          return super(*args, **kwargs, &block) if block
-
-          cache_key = safe_memo_cache_key(method_name, args, kwargs)
-
-          # Fast path: check without lock
-          if (record = memo_cache_record(cache_key))
-            return memo_record_value(record)
-          end
-
-          memo_fetch_or_store(cache_key, expires_at: expires_at) { super(*args, **kwargs) }
-        end
-
-        send(visibility, method_name)
-      end
-
-      prepend mod
-    end
-
-    private
-
-    def memoized_method_visibility(method_name)
-      return :private if private_method_defined?(method_name)
-      return :protected if protected_method_defined?(method_name)
-
-      :public
-    end
-  end
 
   def memoized?(method_name, *args, **kwargs, &block)
     return false if block
@@ -196,7 +151,7 @@ module SafeMemoize
   end
 
   def memo_record(value, expires_at:)
-    {value: value, expires_at: expires_at}
+    { value: value, expires_at: expires_at }
   end
 
   def memo_record_value(record)
@@ -261,7 +216,7 @@ module SafeMemoize
   def memo_projection(cache_key, value, include_method:, include_value:)
     method_name, args, kwargs = cache_key
 
-    payload = {args: args, kwargs: kwargs}
+    payload = { args: args, kwargs: kwargs }
     payload[:method] = method_name if include_method
     payload[:value] = memo_record_value(value) if include_value
     payload
