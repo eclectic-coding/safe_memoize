@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Add optional TTL expiration support for memoized entries
+
 ## [0.1.2] - 2026-05-13
 
 - Preserve public, protected, and private visibility for memoized methods

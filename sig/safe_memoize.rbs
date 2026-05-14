@@ -2,20 +2,21 @@ module SafeMemoize
   VERSION: String
 
   type memo_key = [Symbol, Array[untyped], Hash[Symbol, untyped]]
-  type memo_entry = [memo_key, untyped]
+  type memo_record = { value: untyped, expires_at: Float? }
+  type memo_entry = [memo_key, memo_record]
 
-  @__safe_memo_cache__: Hash[memo_key, untyped]?
+  @__safe_memo_cache__: Hash[memo_key, memo_record]?
   @__safe_memo_mutex__: Mutex?
 
   def self.prepended: (Class base) -> void
 
   def memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
-  def memo_count: () -> Integer
-  def memo_count: (Symbol | String method_name) -> Integer
-  def memo_keys: () -> Array[untyped]
-  def memo_keys: (Symbol | String method_name) -> Array[untyped]
-  def memo_values: () -> Array[untyped]
-  def memo_values: (Symbol | String method_name) -> Array[untyped]
+  overload def memo_count: () -> Integer
+  overload def memo_count: (Symbol | String) -> Integer
+  overload def memo_keys: () -> Array[untyped]
+  overload def memo_keys: (Symbol | String) -> Array[untyped]
+  overload def memo_values: () -> Array[untyped]
+  overload def memo_values: (Symbol | String) -> Array[untyped]
   def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
   def reset_all_memos: () -> void
 
@@ -23,25 +24,21 @@ module SafeMemoize
 
   def safe_memo_scoped_method: (Array[untyped] method_name) -> Symbol?
   def with_memo_lock: { () -> untyped } -> untyped
-  def memo_cache_or_nil: () -> Hash[memo_key, untyped]?
+  def memo_cache_or_nil: () -> Hash[memo_key, memo_record]?
   def memo_cache_hit?: (memo_key cache_key) -> bool
+  def memo_cache_record: (memo_key cache_key) -> memo_record?
   def memo_cache_read: (memo_key cache_key) -> untyped?
-  def memo_fetch_or_store: (memo_key cache_key) { () -> untyped } -> untyped
+  def memo_fetch_or_store: (memo_key cache_key, ?expires_at: Float?) { () -> untyped } -> untyped
   def memo_mutex!: () -> Mutex
-  def with_memo_cache: { (Hash[memo_key, untyped] cache) -> untyped } -> untyped?
+  def with_memo_cache: { (Hash[memo_key, memo_record] cache) -> untyped } -> untyped?
+  def memo_ttl: (Numeric? ttl) -> Float?
+  def memo_expires_at: (Float? ttl) -> Float?
+  def memo_record: (untyped value, ?expires_at: Float?) -> memo_record
+  def memo_record_value: (memo_record record) -> untyped
+  def memo_record_live?: (memo_record? record) -> bool
+  def memo_prune_expired_entries!: (Hash[memo_key, memo_record] cache) -> void
   def memo_matcher_for: (Symbol method_name, Array[untyped] args, Hash[Symbol, untyped] kwargs) -> ((memo_key) -> bool)
-  def memo_entries_for: (Symbol? method_name) -> Array[memo_entry]
-  def safe_memo_count_for: (Symbol? method_name) -> Integer
-  def safe_memo_keys_for: (Symbol? method_name) -> Array[untyped]
-  def safe_memo_values_for: (Symbol? method_name) -> Array[untyped]
-  def memo_projection: (memo_key cache_key, untyped value, include_method: bool, include_value: bool) -> Hash[Symbol, untyped]
-  def safe_memo_cache_key: (Symbol | String method_name, Array[untyped] args, Hash[Symbol, untyped] kwargs) -> memo_key
 
   module ClassMethods
-    def memoize: (Symbol | String method_name) -> void
-
-    private
-
-    def memoized_method_visibility: (Symbol method_name) -> (:private | :protected | :public)
   end
 end

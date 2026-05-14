@@ -10,9 +10,20 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize(method_name)
+    def memoize(method_name, ttl: nil)
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
+
+      ttl = if ttl.nil?
+        nil
+      else
+        ttl = Float(ttl)
+        raise ArgumentError, "ttl must be non-negative" if ttl < 0
+
+        ttl
+      end
+
+      expires_at = ttl && Process.clock_gettime(Process::CLOCK_MONOTONIC) + ttl
 
       mod = Module.new do
         define_method(method_name) do |*args, **kwargs, &block|
@@ -22,9 +33,11 @@ module SafeMemoize
           cache_key = safe_memo_cache_key(method_name, args, kwargs)
 
           # Fast path: check without lock
-          return memo_cache_read(cache_key) if memo_cache_hit?(cache_key)
+          if (record = memo_cache_record(cache_key))
+            return memo_record_value(record)
+          end
 
-          memo_fetch_or_store(cache_key) { super(*args, **kwargs) }
+          memo_fetch_or_store(cache_key, expires_at: expires_at) { super(*args, **kwargs) }
         end
 
         send(visibility, method_name)
@@ -49,7 +62,7 @@ module SafeMemoize
     cache_key = safe_memo_cache_key(method_name, args, kwargs)
 
     with_memo_lock do
-      with_memo_cache { |cache| cache.key?(cache_key) } || false
+      memo_cache_hit?(cache_key)
     end
   end
 
@@ -118,23 +131,38 @@ module SafeMemoize
   end
 
   def memo_cache_hit?(cache_key)
+    !!memo_cache_record(cache_key)
+  end
+
+  def memo_cache_record(cache_key)
     cache = memo_cache_or_nil
-    cache&.key?(cache_key)
+    return nil unless cache
+
+    record = cache[cache_key]
+    return nil unless memo_record_live?(record)
+
+    record
   end
 
   def memo_cache_read(cache_key)
-    cache = memo_cache_or_nil
-    cache && cache[cache_key]
+    record = memo_cache_record(cache_key)
+    return nil unless record
+
+    memo_record_value(record)
   end
 
-  def memo_fetch_or_store(cache_key)
+  def memo_fetch_or_store(cache_key, expires_at: nil)
     memo_mutex!.synchronize do
       @__safe_memo_cache__ ||= {}
 
-      if @__safe_memo_cache__.key?(cache_key)
-        @__safe_memo_cache__[cache_key]
+      record = @__safe_memo_cache__[cache_key]
+
+      if memo_record_live?(record)
+        memo_record_value(record)
       else
-        @__safe_memo_cache__[cache_key] = yield
+        value = yield
+        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: expires_at)
+        value
       end
     end
   end
@@ -150,6 +178,44 @@ module SafeMemoize
     yield cache
   end
 
+  def memo_ttl(ttl)
+    return nil if ttl.nil?
+
+    ttl = Float(ttl)
+    raise ArgumentError, "ttl must be non-negative" if ttl < 0
+
+    ttl
+  rescue ArgumentError, TypeError
+    raise ArgumentError, "ttl must be a non-negative number"
+  end
+
+  def memo_expires_at(ttl)
+    return nil unless ttl
+
+    Process.clock_gettime(Process::CLOCK_MONOTONIC) + ttl
+  end
+
+  def memo_record(value, expires_at:)
+    {value: value, expires_at: expires_at}
+  end
+
+  def memo_record_value(record)
+    record[:value]
+  end
+
+  def memo_record_live?(record)
+    return false unless record
+
+    expires_at = record[:expires_at]
+    return true unless expires_at
+
+    expires_at > Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  end
+
+  def memo_prune_expired_entries!(cache)
+    cache.delete_if { |_, record| !memo_record_live?(record) }
+  end
+
   def memo_matcher_for(method_name, args, kwargs)
     if args.empty? && kwargs.empty?
       ->(key) { key[0] == method_name }
@@ -163,6 +229,7 @@ module SafeMemoize
     cache = memo_cache_or_nil
     return [] unless cache
 
+    memo_prune_expired_entries!(cache)
     entries = cache.to_a
     return entries unless method_name
 
@@ -196,7 +263,7 @@ module SafeMemoize
 
     payload = {args: args, kwargs: kwargs}
     payload[:method] = method_name if include_method
-    payload[:value] = value if include_value
+    payload[:value] = memo_record_value(value) if include_value
     payload
   end
 
