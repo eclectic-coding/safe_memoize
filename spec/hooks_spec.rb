@@ -103,8 +103,8 @@ RSpec.describe SafeMemoize do
           evicted_calls << {key: cache_key, record: record}
         end
 
-        value1 = instance.expensive_computation(1)
-        value2 = instance.expensive_computation(2)
+        instance.expensive_computation(1)
+        instance.expensive_computation(2)
 
         expect(evicted_calls).to be_empty
 
@@ -228,4 +228,3 @@ RSpec.describe SafeMemoize do
     end
   end
 end
-
