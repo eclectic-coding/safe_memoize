@@ -1,6 +1,10 @@
 ## [Unreleased]
 
 - Add optional TTL expiration support for memoized entries
+- Add cache invalidation/expiration hooks for custom handlers
+  - `on_memo_expire` hook fires when TTL entries expire
+  - `on_memo_evict` hook fires when manually resetting cache entries
+  - `clear_memo_hooks` to remove registered hooks
 
 ## [0.1.2] - 2026-05-13
 

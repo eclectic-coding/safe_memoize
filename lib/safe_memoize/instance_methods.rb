@@ -6,5 +6,6 @@ module SafeMemoize
     include CacheStoreMethods
     include CacheRecordMethods
     include InspectionMethods
+    include HooksMethods
   end
 end

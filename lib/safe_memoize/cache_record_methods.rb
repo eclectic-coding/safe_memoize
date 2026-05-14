@@ -39,7 +39,14 @@ module SafeMemoize
     end
 
     def memo_prune_expired_entries!(cache)
-      cache.delete_if { |_, record| !memo_record_live?(record) }
+      cache.delete_if do |cache_key, record|
+        if !memo_record_live?(record)
+          call_memo_hooks(:on_expire, cache_key, record)
+          true
+        else
+          false
+        end
+      end
     end
   end
 end
