@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-15
+
 - Add `on_memo_hit` hook that fires on every cache hit, completing the lifecycle API alongside `on_memo_expire` and `on_memo_evict`
 - Add conditional memoization via `if:` and `unless:` options on `memoize`
   - `if: ->(result) { ... }` — only caches when the lambda returns truthy
