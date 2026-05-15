@@ -30,6 +30,9 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Optional TTL expiration support for cached entries
 - Optional LRU cache size limit per method via `max_size:`
 - Conditional caching via `if:` and `unless:` predicates
+- Lifecycle hooks for eviction and expiration events
+- Per-instance cache metrics (hit rate, miss rate, computation time)
+- Custom cache key generation per method
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -132,6 +135,36 @@ obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword c
 obj.reset_all_memos                             # Clears all memoized values
 ```
 
+### Lifecycle hooks
+
+Register callbacks that fire when cached entries are evicted or expire.
+
+**`on_memo_evict`** fires when an entry is removed via `reset_memo`, `reset_all_memos`, or LRU eviction:
+
+```ruby
+obj.on_memo_evict do |cache_key, record|
+  Rails.logger.info("Evicted #{cache_key[0]}(#{cache_key[1].join(", ")}), was: #{record[:value].inspect}")
+end
+```
+
+**`on_memo_expire`** fires when a TTL entry is detected as expired (on the next call or during inspection):
+
+```ruby
+obj.on_memo_expire do |cache_key, record|
+  Rails.logger.debug("TTL expired: #{cache_key[0]}")
+end
+```
+
+Multiple hooks of the same type can be registered and all will fire. Remove them with `clear_memo_hooks`:
+
+```ruby
+obj.clear_memo_hooks(:on_evict)   # Clears evict hooks only
+obj.clear_memo_hooks(:on_expire)  # Clears expire hooks only
+obj.clear_memo_hooks              # Clears all hooks
+```
+
+Hooks are per-instance and do not affect other objects of the same class.
+
 ### TTL expiration
 
 ```ruby
@@ -214,6 +247,44 @@ Both options accept any callable and compose with `ttl:` and `max_size:`:
 memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 ```
 
+### Custom cache keys
+
+By default the cache key is derived from the method name and all arguments. Use `memoize_with_custom_key` on an instance to control exactly what makes two calls equivalent:
+
+```ruby
+class ReportService
+  prepend SafeMemoize
+
+  def generate(user_id, options)
+    build_report(user_id, options)
+  end
+  memoize :generate
+end
+
+svc = ReportService.new
+
+# Cache only by user_id — ignore the options hash entirely
+svc.memoize_with_custom_key(:generate) { |user_id, _options| user_id }
+
+svc.generate(42, {format: :pdf})  # computes and caches
+svc.generate(42, {format: :csv})  # cache hit — same user_id, options ignored
+```
+
+The block can return any comparable value — a scalar, array, or hash:
+
+```ruby
+svc.memoize_with_custom_key(:generate) do |user_id, options|
+  {user: user_id, locale: options[:locale]}
+end
+```
+
+Custom key generators are per-instance and can be cleared at any time:
+
+```ruby
+svc.clear_custom_keys(:generate)  # Remove generator for one method
+svc.clear_custom_keys             # Remove all custom key generators
+```
+
 ### Cache inspection
 
 ```ruby
@@ -231,6 +302,33 @@ obj.memo_keys(:search)                    # Cached signatures for one method
 obj.memo_values                           # Cached signatures and values for all methods
 obj.memo_values(:search)                  # Cached signatures and values for one method
 ```
+
+### Cache metrics
+
+Each instance tracks hits, misses, and computation time automatically.
+
+```ruby
+obj.cache_stats
+# => {
+#      total_hits: 42,
+#      total_misses: 8,
+#      hit_rate: 84.0,
+#      miss_rate: 16.0,
+#      average_computation_time: 0.012345,
+#      entries: [
+#        { method: :find, args: [1], hits: 10, misses: 1,
+#          hit_rate: 90.91, computation_time: 0.005 },
+#        ...
+#      ]
+#    }
+
+obj.cache_stats_for(:find)   # Stats scoped to one method
+obj.cache_hit_rate           # => 84.0  (percentage)
+obj.cache_miss_rate          # => 16.0  (percentage)
+obj.cache_metrics_reset      # Clears all collected metrics
+```
+
+Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
 
 ## How It Works
 
