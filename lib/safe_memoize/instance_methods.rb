@@ -11,5 +11,6 @@ module SafeMemoize
     include PublicMetricsMethods
     include CustomKeyMethods
     include PublicCustomKeyMethods
+    include LruMethods
   end
 end

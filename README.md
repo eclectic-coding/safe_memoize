@@ -28,6 +28,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Includes a `memo_keys` helper for inspecting cached signatures
 - Includes a `memo_values` helper for inspecting cached signatures and values
 - Optional TTL expiration support for cached entries
+- Optional LRU cache size limit per method via `max_size:`
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -144,6 +145,39 @@ end
 ```
 
 With a TTL, cached values expire automatically after the given number of seconds. The next call recomputes and refreshes the cache.
+
+### LRU cache size limit
+
+Pass `max_size:` to cap how many entries a method can hold. When the limit is reached the least-recently-used entry is evicted to make room:
+
+```ruby
+class ProductService
+  prepend SafeMemoize
+
+  def find(id)
+    Product.find(id)
+  end
+  memoize :find, max_size: 100
+end
+```
+
+Cache hits count as recent access, so a frequently-read entry will never be the one evicted:
+
+```ruby
+svc = ProductService.new
+svc.find(1)   # miss — cached
+svc.find(2)   # miss — cached
+svc.find(1)   # hit  — promotes 1 to most-recently-used; 2 is now LRU
+svc.find(3)   # miss — evicts 2 (LRU), caches 3
+```
+
+`max_size:` combines with `ttl:` — LRU eviction applies within the TTL window, and entries also expire normally when the TTL elapses:
+
+```ruby
+memoize :find, max_size: 50, ttl: 300
+```
+
+The `on_evict` hook fires for LRU-evicted entries the same way it does for manual `reset_memo` calls.
 
 ### Cache inspection
 
