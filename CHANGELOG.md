@@ -24,7 +24,7 @@
 - Add cache statistics and monitoring capabilities
   - `cache_stats` for comprehensive cache metrics
   - `cache_stats_for(method_name)` for per-method statistics
-    - `cache_hit_rate` and `cache_miss_rate` for performance analysisdocument doclint 
+  - `cache_hit_rate` and `cache_miss_rate` for performance analysis
   - `cache_metrics_reset` to clear collected metrics
 - Add manual cache key generation support
   - `memoize_with_custom_key` to define custom cache key logic
