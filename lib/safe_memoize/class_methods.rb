@@ -2,9 +2,12 @@
 
 module SafeMemoize
   module ClassMethods
-    def memoize(method_name, ttl: nil, max_size: nil)
+    def memoize(method_name, ttl: nil, max_size: nil, if: nil, unless: nil)
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
+
+      cond_if = binding.local_variable_get(:if)
+      cond_unless = binding.local_variable_get(:unless)
 
       ttl = if ttl.nil?
         nil
@@ -24,6 +27,19 @@ module SafeMemoize
         max_size
       end
 
+      if cond_if && cond_unless
+        raise ArgumentError, "cannot specify both :if and :unless"
+      end
+      raise ArgumentError, ":if must be callable" if cond_if && !cond_if.respond_to?(:call)
+      raise ArgumentError, ":unless must be callable" if cond_unless && !cond_unless.respond_to?(:call)
+
+      # Normalize to a single "should cache?" predicate
+      condition = if cond_if
+        cond_if
+      elsif cond_unless
+        ->(result) { !cond_unless.call(result) }
+      end
+
       expires_at = ttl && Process.clock_gettime(Process::CLOCK_MONOTONIC) + ttl
 
       mod = Module.new do
@@ -33,12 +49,12 @@ module SafeMemoize
 
           cache_key = compute_cache_key(method_name, args, kwargs)
 
-          if max_size
-            # LRU path: hold the lock for reads too so access order stays consistent.
+          if max_size || condition
+            # Locked path: used when LRU tracking or conditional storage is needed.
             memo_mutex!.synchronize do
               record = memo_cache_record(cache_key)
               if record
-                lru_touch(method_name, cache_key)
+                lru_touch(method_name, cache_key) if max_size
                 record_cache_hit(method_name, args)
                 memo_record_value(record)
               else
@@ -46,10 +62,12 @@ module SafeMemoize
                 value = super(*args, **kwargs)
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-                lru_evict_if_over_limit(method_name, max_size)
-                @__safe_memo_cache__ ||= {}
-                @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: expires_at)
-                lru_touch(method_name, cache_key)
+                if !condition || condition.call(value)
+                  lru_evict_if_over_limit(method_name, max_size) if max_size
+                  @__safe_memo_cache__ ||= {}
+                  @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: expires_at)
+                  lru_touch(method_name, cache_key) if max_size
+                end
                 record_cache_miss(method_name, args, elapsed_time)
 
                 value
