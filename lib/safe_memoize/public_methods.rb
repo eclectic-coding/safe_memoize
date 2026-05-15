@@ -81,6 +81,7 @@ module SafeMemoize
           end
         end
         @__safe_memo_cache__ = {}
+        lru_clear_all
       end
     end
   end

@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+- Add LRU cache size limit via `max_size:` option on `memoize`
+  - Evicts the least-recently-used entry per method when the limit is reached
+  - Cache hits promote entries to most-recently-used, preventing premature eviction
+  - Fires the existing `on_evict` hook for LRU-evicted entries
+  - Self-healing: stale LRU references left by `reset_memo` are pruned automatically
+  - Compatible with `ttl:` option and all existing inspection/reset APIs
+  - Thread-safe under concurrent access
+
 ## [0.2.0] - 2026-05-14
 
 - Add optional TTL expiration support for memoized entries
@@ -10,7 +18,7 @@
 - Add cache statistics and monitoring capabilities
   - `cache_stats` for comprehensive cache metrics
   - `cache_stats_for(method_name)` for per-method statistics
-  - `cache_hit_rate` and `cache_miss_rate` for performance analysis
+    - `cache_hit_rate` and `cache_miss_rate` for performance analysisdocument doclint 
   - `cache_metrics_reset` to clear collected metrics
 - Add manual cache key generation support
   - `memoize_with_custom_key` to define custom cache key logic
