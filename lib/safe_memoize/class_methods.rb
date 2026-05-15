@@ -56,6 +56,7 @@ module SafeMemoize
               if record
                 lru_touch(method_name, cache_key) if max_size
                 record_cache_hit(method_name, args)
+                call_memo_hooks(:on_hit, cache_key, record)
                 memo_record_value(record)
               else
                 start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -77,6 +78,7 @@ module SafeMemoize
             # Fast path: check without lock
             if (record = memo_cache_record(cache_key))
               record_cache_hit(method_name, args)
+              call_memo_hooks(:on_hit, cache_key, record)
               return memo_record_value(record)
             end
 

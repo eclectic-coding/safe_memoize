@@ -30,7 +30,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Optional TTL expiration support for cached entries
 - Optional LRU cache size limit per method via `max_size:`
 - Conditional caching via `if:` and `unless:` predicates
-- Lifecycle hooks for eviction and expiration events
+- Lifecycle hooks for hit, eviction, and expiration events
 - Per-instance cache metrics (hit rate, miss rate, computation time)
 - Custom cache key generation per method
 - Block arguments bypass cache (blocks aren't comparable)
@@ -144,6 +144,14 @@ Register callbacks that fire when cached entries are evicted or expire.
 ```ruby
 obj.on_memo_evict do |cache_key, record|
   Rails.logger.info("Evicted #{cache_key[0]}(#{cache_key[1].join(", ")}), was: #{record[:value].inspect}")
+end
+```
+
+**`on_memo_hit`** fires on every cache hit:
+
+```ruby
+obj.on_memo_hit do |cache_key, record|
+  StatsD.increment("cache.hit", tags: ["method:#{cache_key[0]}"])
 end
 ```
 
