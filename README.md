@@ -29,6 +29,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - Includes a `memo_values` helper for inspecting cached signatures and values
 - Optional TTL expiration support for cached entries
 - Optional LRU cache size limit per method via `max_size:`
+- Conditional caching via `if:` and `unless:` predicates
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
@@ -178,6 +179,40 @@ memoize :find, max_size: 50, ttl: 300
 ```
 
 The `on_evict` hook fires for LRU-evicted entries the same way it does for manual `reset_memo` calls.
+
+### Conditional caching
+
+Use `if:` to cache a result only when the predicate returns truthy, or `unless:` to skip caching when it returns truthy. Calls that don't satisfy the condition recompute every time until they do.
+
+```ruby
+class UserService
+  prepend SafeMemoize
+
+  # Don't cache nil — retries on every call until a user is found
+  def find(id)
+    User.find_by(id: id)
+  end
+  memoize :find, if: ->(result) { !result.nil? }
+end
+```
+
+```ruby
+class DataService
+  prepend SafeMemoize
+
+  # Don't cache error responses
+  def fetch(key)
+    api_client.get(key)
+  end
+  memoize :fetch, unless: ->(result) { result.is_a?(ErrorResponse) }
+end
+```
+
+Both options accept any callable and compose with `ttl:` and `max_size:`:
+
+```ruby
+memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
+```
 
 ### Cache inspection
 

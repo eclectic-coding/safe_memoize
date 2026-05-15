@@ -13,7 +13,7 @@ module SafeMemoize
   def self.prepended: (Class base) -> void
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?) -> void
 
     private
 
