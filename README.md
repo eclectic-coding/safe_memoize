@@ -16,23 +16,23 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 
 ## Features
 
-- Correctly memoizes `nil` and `false` return values
-- Caches per unique arguments (positional and keyword)
-- Thread-safe via double-check locking
+- [Correctly memoizes `nil` and `false` return values](#nil-and-false-safety)
+- [Caches per unique arguments (positional and keyword)](#with-arguments)
+- [Thread-safe via double-check locking](#how-it-works)
 - Zero runtime dependencies
-- Simple `prepend` + `memoize` API
-- Preserves public, protected, and private method visibility
-- Supports targeted cache invalidation by argument combination
-- Includes a `memoized?` helper for cache inspection
-- Includes a `memo_count` helper for cache size stats
-- Includes a `memo_keys` helper for inspecting cached signatures
-- Includes a `memo_values` helper for inspecting cached signatures and values
-- Optional TTL expiration support for cached entries
-- Optional LRU cache size limit per method via `max_size:`
-- Conditional caching via `if:` and `unless:` predicates
-- Lifecycle hooks for hit, eviction, and expiration events
-- Per-instance cache metrics (hit rate, miss rate, computation time)
-- Custom cache key generation per method
+- [Simple `prepend` + `memoize` API](#usage)
+- [Preserves public, protected, and private method visibility](#works-with-private-methods)
+- [Supports targeted cache invalidation by argument combination](#cache-reset)
+- [Includes a `memoized?` helper for cache inspection](#cache-inspection)
+- [Includes a `memo_count` helper for cache size stats](#cache-inspection)
+- [Includes a `memo_keys` helper for inspecting cached signatures](#cache-inspection)
+- [Includes a `memo_values` helper for inspecting cached signatures and values](#cache-inspection)
+- [Optional TTL expiration support for cached entries](#ttl-expiration)
+- [Optional LRU cache size limit per method via `max_size:`](#lru-cache-size-limit)
+- [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
+- [Lifecycle hooks for hit, eviction, and expiration events](#lifecycle-hooks)
+- [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
+- [Custom cache key generation per method](#custom-cache-keys)
 - Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
