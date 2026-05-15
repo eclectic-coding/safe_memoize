@@ -5,13 +5,13 @@ module SafeMemoize
     private
 
     def memo_hook_store
-      @__safe_memo_hooks__ ||= {on_expire: [], on_evict: []}
+      @__safe_memo_hooks__ ||= {on_expire: [], on_evict: [], on_hit: []}
     end
 
     def register_memo_hook(hook_type, &block)
       raise ArgumentError, "block required" unless block
 
-      valid_hooks = [:on_expire, :on_evict]
+      valid_hooks = [:on_expire, :on_evict, :on_hit]
       raise ArgumentError, "invalid hook type: #{hook_type}" unless valid_hooks.include?(hook_type)
 
       memo_hook_store[hook_type] << block
@@ -26,7 +26,7 @@ module SafeMemoize
       if hook_type
         memo_hook_store[hook_type] = []
       else
-        @__safe_memo_hooks__ = {on_expire: [], on_evict: []}
+        @__safe_memo_hooks__ = {on_expire: [], on_evict: [], on_hit: []}
       end
     end
   end

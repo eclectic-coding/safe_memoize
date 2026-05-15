@@ -94,6 +94,104 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    describe "#on_memo_hit" do
+      it "calls the hook on a cache hit" do
+        instance = test_class.new
+        hit_calls = []
+
+        instance.on_memo_hit do |cache_key, record|
+          hit_calls << {key: cache_key, record: record}
+        end
+
+        instance.expensive_computation(1)
+        expect(hit_calls).to be_empty
+
+        instance.expensive_computation(1)
+        expect(hit_calls.size).to eq(1)
+        expect(hit_calls[0][:key]).to include(:expensive_computation)
+        expect(hit_calls[0][:record]).to have_key(:value)
+      end
+
+      it "does not call the hook on a cache miss" do
+        instance = test_class.new
+        hit_calls = []
+
+        instance.on_memo_hit { |_, _| hit_calls << true }
+
+        instance.expensive_computation(1)
+        instance.expensive_computation(2)
+
+        expect(hit_calls).to be_empty
+      end
+
+      it "calls the hook on every subsequent hit" do
+        instance = test_class.new
+        hit_calls = []
+
+        instance.on_memo_hit { |_, _| hit_calls << true }
+
+        instance.expensive_computation(1)
+        3.times { instance.expensive_computation(1) }
+
+        expect(hit_calls.size).to eq(3)
+      end
+
+      it "raises ArgumentError without a block" do
+        instance = test_class.new
+        expect { instance.on_memo_hit }.to raise_error(ArgumentError, /block required/)
+      end
+
+      it "supports multiple on_memo_hit hooks" do
+        instance = test_class.new
+        calls1 = []
+        calls2 = []
+
+        instance.on_memo_hit { |_, _| calls1 << true }
+        instance.on_memo_hit { |_, _| calls2 << true }
+
+        instance.expensive_computation(1)
+        instance.expensive_computation(1)
+
+        expect(calls1.size).to eq(1)
+        expect(calls2.size).to eq(1)
+      end
+
+      it "fires for hits via the LRU path" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def expensive_computation(x)
+            x * 2
+          end
+
+          memoize :expensive_computation, max_size: 10
+        end
+
+        instance = klass.new
+        hit_calls = []
+
+        instance.on_memo_hit { |_, _| hit_calls << true }
+
+        instance.expensive_computation(1)
+        instance.expensive_computation(1)
+
+        expect(hit_calls.size).to eq(1)
+      end
+
+      it "does not fire when clear_memo_hooks is called" do
+        instance = test_class.new
+        hit_calls = []
+
+        instance.on_memo_hit { |_, _| hit_calls << true }
+        instance.clear_memo_hooks(:on_hit)
+
+        instance.expensive_computation(1)
+        instance.expensive_computation(1)
+
+        expect(hit_calls).to be_empty
+      end
+    end
+
     describe "#on_memo_evict" do
       it "calls the hook when reset_memo is called" do
         instance = test_class.new
