@@ -2,6 +2,10 @@
 
 Thread-safe memoization for Ruby that correctly handles `nil` and `false` values.
 
+SafeMemoize is a production-ready, zero-dependency memoization library for Ruby. It wraps methods with a `prepend`-based cache that handles everything the standard `||=` idiom gets wrong: `nil` and `false` return values are cached correctly, per-argument result maps eliminate redundant computation for parameterized methods, and a per-instance `Mutex` with double-check locking makes the whole thing safe under concurrent load.
+
+Beyond the basics, SafeMemoize ships with TTL expiration, LRU cache size capping, conditional caching via `if:`/`unless:` predicates, lifecycle hooks for cache hits, evictions, and expirations, per-instance metrics (hit rate, miss rate, average computation time), targeted and bulk cache invalidation, custom cache key generators, and rich introspection helpers (`memoized?`, `memo_count`, `memo_keys`, `memo_values`). It preserves method visibility (public, protected, and private) and requires no runtime dependencies.
+
 ## The Problem
 
 Ruby's common memoization pattern breaks with falsy values:

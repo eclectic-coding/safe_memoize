@@ -10,7 +10,14 @@ Gem::Specification.new do |spec|
   spec.email = ["eclectic-coding@users.noreply.github.com"]
 
   spec.summary = "Thread-safe memoization that correctly handles nil and false values"
-  spec.description = "A prepend-based memoization module for Ruby that safely caches nil and false return values, supports method arguments, and provides thread safety via double-check locking."
+  spec.description = "SafeMemoize is a production-ready, zero-dependency memoization library for Ruby. " \
+                     "It uses Ruby's prepend mechanism to wrap methods with a thread-safe cache (Mutex + double-check locking) " \
+                     "that correctly handles nil and false return values — fixing the silent bug in the common ||= pattern. " \
+                     "Results are cached per unique argument combination, so parameterized methods only compute each variant once. " \
+                     "Additional features include TTL expiration, LRU cache size limiting, conditional caching via if:/unless: predicates, " \
+                     "lifecycle hooks for hit/eviction/expiration events, per-instance metrics (hit rate, miss rate, computation time), " \
+                     "targeted cache invalidation, custom cache key generators, and introspection helpers. " \
+                     "Method visibility (public, protected, private) is fully preserved."
   spec.homepage = "https://github.com/eclectic-coding/safe_memoize"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
