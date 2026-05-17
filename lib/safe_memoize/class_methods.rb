@@ -2,7 +2,7 @@
 
 module SafeMemoize
   module ClassMethods
-    def memoize(method_name, ttl: nil, max_size: nil, if: nil, unless: nil, shared: false)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false)
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
 
@@ -27,6 +27,8 @@ module SafeMemoize
 
         max_size
       end
+
+      raise ArgumentError, "ttl_refresh: requires a ttl: to be set" if ttl_refresh && ttl.nil?
 
       if cond_if && cond_unless
         raise ArgumentError, "cannot specify both :if and :unless"
@@ -63,6 +65,7 @@ module SafeMemoize
                   lru.delete(cache_key)
                   lru[cache_key] = true
                 end
+                record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
                 record_cache_hit(method_name, args, kwargs)
                 call_memo_hooks(:on_hit, cache_key, record)
                 record[:value]
@@ -116,12 +119,13 @@ module SafeMemoize
 
           cache_key = compute_cache_key(method_name, args, kwargs)
 
-          if max_size || condition
-            # Locked path: used when LRU tracking or conditional storage is needed.
+          if max_size || condition || ttl_refresh
+            # Locked path: used when LRU tracking, conditional storage, or TTL refresh is needed.
             memo_mutex!.synchronize do
               record = memo_cache_record(cache_key)
               if record
                 lru_touch(method_name, cache_key) if max_size
+                record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
                 record_cache_hit(method_name, args, kwargs)
                 call_memo_hooks(:on_hit, cache_key, record)
                 memo_record_value(record)

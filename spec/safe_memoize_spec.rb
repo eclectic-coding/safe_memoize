@@ -825,6 +825,71 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "ttl_refresh: true" do
+      it "raises ArgumentError when used without ttl:" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def value = 1
+            memoize :value, ttl_refresh: true
+          end
+        end.to raise_error(ArgumentError, /ttl_refresh.*ttl/)
+      end
+
+      it "resets the expiry clock on every cache hit" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+          def initialize = (@call_count = 0)
+          def compute = (@call_count += 1)
+          memoize :compute, ttl: 0.03, ttl_refresh: true
+        end
+
+        obj = klass.new
+        obj.compute               # miss — starts TTL
+        sleep(0.02)
+        obj.compute               # hit — refreshes TTL
+        sleep(0.02)
+        expect(obj.compute).to eq(1)   # still cached — TTL was refreshed
+        expect(obj.call_count).to eq(1)
+      end
+
+      it "expires after a full ttl of inactivity" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+          def initialize = (@call_count = 0)
+          def compute = (@call_count += 1)
+          memoize :compute, ttl: 0.02, ttl_refresh: true
+        end
+
+        obj = klass.new
+        obj.compute
+        sleep(0.04)
+        obj.compute               # expired — recomputes
+        expect(obj.call_count).to eq(2)
+      end
+
+      it "works with shared: true" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true, ttl: 0.03, ttl_refresh: true
+        end
+
+        first = klass.new.value
+        sleep(0.02)
+        klass.new.value           # hit — refreshes shared TTL
+        sleep(0.02)
+        expect(klass.new.value).to eq(first) # still cached
+        klass.reset_all_shared_memos
+      end
+    end
+
     context "edge cases" do
       it "preserves private visibility for memoized methods" do
         klass = Class.new do
