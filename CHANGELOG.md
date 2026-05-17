@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+- Add `warm_memo`, `dump_memo`, and `load_memo` for cache warm-up and persistence
+  - `warm_memo(:method, *args, **kwargs) { value }` — pre-populates a cache entry via block without calling the method
+  - `dump_memo` / `dump_memo(:method)` — exports live cached entries as a plain `{[method, args, kwargs] => value}` hash
+  - `load_memo(snapshot)` — merges a snapshot into the cache; loaded entries have no TTL
+  - Expired entries are excluded from `dump_memo` output
 - Add `shared: true` option on `memoize` to store results on the class instead of per-instance
   - All instances share one cache; the method is computed only once regardless of how many objects exist
   - Class-level invalidation: `reset_shared_memo`, `reset_all_shared_memos`

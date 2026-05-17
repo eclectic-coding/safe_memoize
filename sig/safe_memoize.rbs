@@ -9,18 +9,29 @@ module SafeMemoize
 
   @__safe_memo_cache__: Hash[memo_key, memo_record]?
   @__safe_memo_mutex__: Mutex?
+  @__safe_memo_shared_cache__: Hash[memo_key, memo_record]?
+  @__safe_memo_shared_mutex__: Mutex?
 
   def self.prepended: (Class base) -> void
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool) -> void
+    def memoize_all: (?except: Array[Symbol | String], ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?) -> void
+    def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
+    def reset_all_shared_memos: () -> void
+    def shared_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
+    def shared_memo_count: (?Symbol | String method_name) -> Integer
 
     private
 
+    def __safe_memo_shared_cache__: () -> Hash[memo_key, memo_record]
+    def __safe_memo_shared_mutex__: () -> Mutex
     def memoized_method_visibility: (Symbol method_name) -> Symbol
   end
 
   module PublicMethods
+    @__safe_memo_cache__: Hash[memo_key, memo_record]?
+
     def memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) ?{ () -> untyped } -> bool
     def memo_count: (*untyped method_name) -> Integer
     def memo_keys: (*untyped method_name) -> Array[untyped]
@@ -28,7 +39,11 @@ module SafeMemoize
     def on_memo_expire: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def on_memo_evict: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def on_memo_hit: { (memo_key cache_key, memo_record record) -> untyped } -> void
+    def on_memo_miss: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def clear_memo_hooks: (Symbol? hook_type) -> void
+    def warm_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) { () -> untyped } -> untyped
+    def dump_memo: (?Symbol | String method_name) -> Hash[memo_key, untyped]
+    def load_memo: (Hash[memo_key, untyped] snapshot) -> nil
     def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_memos: () -> void
   end
@@ -74,11 +89,11 @@ module SafeMemoize
   end
 
   module HooksMethods
-    @__safe_memo_hooks__: { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc] }?
+    @__safe_memo_hooks__: { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc], on_miss: Array[Proc] }?
 
     private
 
-    def memo_hook_store: () -> { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc] }
+    def memo_hook_store: () -> { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc], on_miss: Array[Proc] }
     def register_memo_hook: (Symbol hook_type) { (memo_key cache_key, memo_record record) -> untyped } -> void
     def call_memo_hooks: (Symbol hook_type, memo_key cache_key, memo_record record) -> void
     def _clear_memo_hooks: (Symbol? hook_type) -> void
