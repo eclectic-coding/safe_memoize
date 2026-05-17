@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+- Add `shared: true` option on `memoize` to store results on the class instead of per-instance
+  - All instances share one cache; the method is computed only once regardless of how many objects exist
+  - Class-level invalidation: `reset_shared_memo`, `reset_all_shared_memos`
+  - Class-level inspection: `shared_memoized?`, `shared_memo_count`
+  - Supports `ttl:`, `if:`, and `unless:` options
+  - Instance hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`) fire on the calling instance
 - Add `memoize_all` to memoize every public method defined on the class in one call
   - Accepts all options supported by `memoize` (`ttl:`, `max_size:`, `if:`, `unless:`)
   - `except:` option to skip specific methods by name
