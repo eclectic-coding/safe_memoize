@@ -54,6 +54,12 @@ module SafeMemoize
       register_memo_hook(:on_hit, &block)
     end
 
+    def on_memo_miss(&block)
+      raise ArgumentError, "block required" unless block
+
+      register_memo_hook(:on_miss, &block)
+    end
+
     def clear_memo_hooks(hook_type = nil)
       with_memo_lock do
         _clear_memo_hooks(hook_type)

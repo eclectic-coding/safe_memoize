@@ -63,13 +63,15 @@ module SafeMemoize
                 value = super(*args, **kwargs)
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
+                new_record = memo_record(value, expires_at: expires_at)
                 if !condition || condition.call(value)
                   lru_evict_if_over_limit(method_name, max_size) if max_size
                   @__safe_memo_cache__ ||= {}
-                  @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: expires_at)
+                  @__safe_memo_cache__[cache_key] = new_record
                   lru_touch(method_name, cache_key) if max_size
                 end
                 record_cache_miss(method_name, args, elapsed_time)
+                call_memo_hooks(:on_miss, cache_key, new_record)
 
                 value
               end
@@ -89,6 +91,8 @@ module SafeMemoize
 
             with_memo_lock do
               record_cache_miss(method_name, args, elapsed_time)
+              new_record = memo_cache_record(cache_key)
+              call_memo_hooks(:on_miss, cache_key, new_record)
             end
 
             result
