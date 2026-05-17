@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-17
+
 - Fix `memo_keys` and `memo_values` showing `args: custom_key, kwargs: nil` for methods using `memoize_with_custom_key` — now surfaces as `custom_key:`
 - Refactor `cache_stats` / `cache_stats_for` to share aggregation logic via private helpers
 
