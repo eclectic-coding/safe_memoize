@@ -119,6 +119,11 @@ module SafeMemoize
     def cache_hit_rate: () -> Float
     def cache_miss_rate: () -> Float
     def cache_metrics_reset: () -> void
+
+    private
+
+    def aggregate_metrics: (Hash[memo_key, untyped] metrics, include_method: bool) -> Hash[Symbol, untyped]
+    def empty_stats: () -> Hash[Symbol, untyped]
   end
 
   module CustomKeyMethods
