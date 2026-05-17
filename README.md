@@ -4,7 +4,7 @@ Thread-safe memoization for Ruby that correctly handles `nil` and `false` values
 
 SafeMemoize is a production-ready, zero-dependency memoization library for Ruby. It wraps methods with a `prepend`-based cache that handles everything the standard `||=` idiom gets wrong: `nil` and `false` return values are cached correctly, per-argument result maps eliminate redundant computation for parameterized methods, and a per-instance `Mutex` with double-check locking makes the whole thing safe under concurrent load.
 
-Beyond the basics, SafeMemoize ships with TTL expiration, LRU cache size capping, conditional caching via `if:`/`unless:` predicates, lifecycle hooks for cache hits, evictions, and expirations, per-instance metrics (hit rate, miss rate, average computation time), targeted and bulk cache invalidation, custom cache key generators, and rich introspection helpers (`memoized?`, `memo_count`, `memo_keys`, `memo_values`). It preserves method visibility (public, protected, and private) and requires no runtime dependencies.
+Beyond the basics, SafeMemoize ships with TTL expiration (including sliding window refresh via `ttl_refresh:`), LRU cache size capping, conditional caching via `if:`/`unless:` predicates, lifecycle hooks for cache hits, evictions, and expirations, per-instance metrics (hit rate, miss rate, average computation time), targeted and bulk cache invalidation, custom cache key generators, and rich introspection helpers (`memoized?`, `memo_count`, `memo_keys`, `memo_values`, `memo_ttl_remaining`). It preserves method visibility (public, protected, and private) and requires no runtime dependencies.
 
 ## The Problem
 
@@ -31,14 +31,16 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Includes a `memo_keys` helper for inspecting cached signatures](#cache-inspection)
 - [Includes a `memo_values` helper for inspecting cached signatures and values](#cache-inspection)
 - [Optional TTL expiration support for cached entries](#ttl-expiration)
+- [Sliding window TTL via `ttl_refresh: true`](#sliding-window-ttl)
 - [Optional LRU cache size limit per method via `max_size:`](#lru-cache-size-limit)
 - [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
 - [Lifecycle hooks for hit, miss, eviction, and expiration events](#lifecycle-hooks)
 - [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
 - [Cache warm-up, export, and restore (`warm_memo`, `dump_memo`, `load_memo`)](#cache-warm-up-and-persistence)
-- [Class-level shared cache via `shared: true`](#shared-cache)
-- [Bulk memoization via `memoize_all`](#bulk-memoization)
+- [Class-level shared cache via `shared: true` with optional LRU](#shared-cache)
+- [Bulk memoization via `memoize_all` (public, protected, and private)](#bulk-memoization)
 - [Custom cache key generation per method](#custom-cache-keys)
+- [TTL introspection via `memo_ttl_remaining`](#cache-inspection)
 
 ## Installation
 
@@ -203,6 +205,23 @@ end
 
 With a TTL, cached values expire automatically after the given number of seconds. The next call recomputes and refreshes the cache.
 
+### Sliding window TTL
+
+Add `ttl_refresh: true` to reset the expiry clock on every cache hit, so the entry only expires after a full TTL of inactivity:
+
+```ruby
+class SessionService
+  prepend SafeMemoize
+
+  def user_data(user_id)
+    fetch_from_db(user_id)
+  end
+  memoize :user_data, ttl: 300, ttl_refresh: true
+end
+```
+
+Without `ttl_refresh:`, the entry expires 300 seconds after it was first cached. With it, the clock resets on every read — the entry is evicted only if the method goes 300 seconds without being called. `ttl_refresh: true` requires `ttl:` to be set and works with both per-instance and `shared: true` memoization.
+
 ### LRU cache size limit
 
 Pass `max_size:` to cap how many entries a method can hold. When the limit is reached the least-recently-used entry is evicted to make room:
@@ -282,6 +301,12 @@ obj.warm_memo(:find, 42) { cached_user }
 obj.warm_memo(:search, "ruby", page: 2) { cached_results }
 ```
 
+Pass `ttl:` to give the warmed entry an expiry:
+
+```ruby
+obj.warm_memo(:current_quote, ttl: 60) { cached_quote }
+```
+
 Useful for seeding the cache from a persistent store on startup, or overriding a cached value in tests.
 
 #### Exporting and restoring the cache
@@ -349,9 +374,15 @@ ConfigService.shared_memo_count                       # Total shared cached entr
 ConfigService.shared_memo_count(:find)                # Entries for one method
 ```
 
-`shared: true` supports `ttl:`, `if:`, and `unless:` options. `max_size:` is not supported (shared LRU may be added in a future release).
+`shared: true` supports `ttl:`, `ttl_refresh:`, `if:`, `unless:`, and `max_size:` options.
 
-Hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`) fire on the calling instance as usual.
+Pass `max_size:` to cap how many entries are kept across all instances. Eviction is LRU, tracked at the class level:
+
+```ruby
+memoize :find, shared: true, max_size: 500
+```
+
+Hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`, `on_memo_evict`) fire on the calling instance as usual.
 
 ### Bulk memoization
 
@@ -391,7 +422,15 @@ Use `except:` to skip specific methods:
 memoize_all except: [:version, :name]
 ```
 
-Only public methods defined directly on the class are memoized — inherited, private, and protected methods are not affected.
+By default only public methods defined directly on the class are memoized. Use `include_protected:` or `include_private:` to opt those visibilities in:
+
+```ruby
+memoize_all include_protected: true
+memoize_all include_private: true
+memoize_all include_protected: true, include_private: true
+```
+
+Inherited methods are never affected regardless of visibility.
 
 ### Custom cache keys
 
@@ -447,6 +486,10 @@ obj.memo_keys                             # All cached signatures with method, a
 obj.memo_keys(:search)                    # Cached signatures for one method
 obj.memo_values                           # Cached signatures and values for all methods
 obj.memo_values(:search)                  # Cached signatures and values for one method
+
+obj.memo_ttl_remaining(:current_quote)           # => 47.231 (seconds until expiry)
+obj.memo_ttl_remaining(:current_user)            # => nil    (no TTL set)
+obj.memo_ttl_remaining(:find, 42)                # => 0      (not cached or already expired)
 ```
 
 ### Cache metrics
