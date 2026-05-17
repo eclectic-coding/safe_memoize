@@ -42,8 +42,6 @@ module SafeMemoize
         ->(result) { !cond_unless.call(result) }
       end
 
-      expires_at = ttl && Process.clock_gettime(Process::CLOCK_MONOTONIC) + ttl
-
       if shared
         klass = self
         shared_mutex = klass.send(:__safe_memo_shared_mutex__)
@@ -61,7 +59,7 @@ module SafeMemoize
               record_live = record && (record[:expires_at].nil? || record[:expires_at] > now)
 
               if record_live
-                record_cache_hit(method_name, args)
+                record_cache_hit(method_name, args, kwargs)
                 call_memo_hooks(:on_hit, cache_key, record)
                 record[:value]
               else
@@ -71,10 +69,10 @@ module SafeMemoize
                 value = super(*args, **kwargs)
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-                new_record = {value: value, expires_at: expires_at}
+                new_record = {value: value, expires_at: memo_expires_at(ttl)}
                 shared_cache[cache_key] = new_record unless condition && !condition.call(value)
 
-                record_cache_miss(method_name, args, elapsed_time)
+                record_cache_miss(method_name, args, kwargs, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
 
                 value
@@ -103,7 +101,7 @@ module SafeMemoize
               record = memo_cache_record(cache_key)
               if record
                 lru_touch(method_name, cache_key) if max_size
-                record_cache_hit(method_name, args)
+                record_cache_hit(method_name, args, kwargs)
                 call_memo_hooks(:on_hit, cache_key, record)
                 memo_record_value(record)
               else
@@ -111,14 +109,14 @@ module SafeMemoize
                 value = super(*args, **kwargs)
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-                new_record = memo_record(value, expires_at: expires_at)
+                new_record = memo_record(value, expires_at: memo_expires_at(ttl))
                 if !condition || condition.call(value)
                   lru_evict_if_over_limit(method_name, max_size) if max_size
                   @__safe_memo_cache__ ||= {}
                   @__safe_memo_cache__[cache_key] = new_record
                   lru_touch(method_name, cache_key) if max_size
                 end
-                record_cache_miss(method_name, args, elapsed_time)
+                record_cache_miss(method_name, args, kwargs, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
 
                 value
@@ -127,18 +125,18 @@ module SafeMemoize
           else
             # Fast path: check without lock
             if (record = memo_cache_record(cache_key))
-              record_cache_hit(method_name, args)
+              record_cache_hit(method_name, args, kwargs)
               call_memo_hooks(:on_hit, cache_key, record)
               return memo_record_value(record)
             end
 
             # Cache miss - compute and store
             start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-            result = memo_fetch_or_store(cache_key, expires_at: expires_at) { super(*args, **kwargs) }
+            result = memo_fetch_or_store(cache_key, ttl: ttl) { super(*args, **kwargs) }
             elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
             with_memo_lock do
-              record_cache_miss(method_name, args, elapsed_time)
+              record_cache_miss(method_name, args, kwargs, elapsed_time)
               new_record = memo_cache_record(cache_key)
               call_memo_hooks(:on_miss, cache_key, new_record)
             end

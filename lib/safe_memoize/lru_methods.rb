@@ -38,6 +38,11 @@ module SafeMemoize
       call_memo_hooks(:on_evict, lru_cache_key, record) if record
     end
 
+    # Remove a single cache key from LRU tracking. Called when an entry expires.
+    def lru_remove(method_name, cache_key)
+      lru_order_store[method_name]&.delete(cache_key)
+    end
+
     # Clear all LRU tracking state. Called by reset_all_memos.
     def lru_clear_all
       @__safe_memo_lru_order__ = {}
