@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+- Add `memoize_all` to memoize every public method defined on the class in one call
+  - Accepts all options supported by `memoize` (`ttl:`, `max_size:`, `if:`, `unless:`)
+  - `except:` option to skip specific methods by name
+  - Only affects public methods defined directly on the class
 - Add `on_memo_miss` hook that fires on every cache miss, completing the full lifecycle hook set alongside `on_memo_hit`, `on_memo_evict`, and `on_memo_expire`
 
 ## [0.3.0] - 2026-05-15
