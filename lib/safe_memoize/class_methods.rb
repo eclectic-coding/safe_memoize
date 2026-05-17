@@ -7,7 +7,6 @@ module SafeMemoize
       visibility = memoized_method_visibility(method_name)
 
       cond_if = binding.local_variable_get(:if)
-
       cond_unless = binding.local_variable_get(:unless)
 
       ttl = if ttl.nil?
