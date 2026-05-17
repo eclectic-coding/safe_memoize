@@ -39,7 +39,7 @@ module SafeMemoize
       memo_record_value(record)
     end
 
-    def memo_fetch_or_store(cache_key, expires_at: nil)
+    def memo_fetch_or_store(cache_key, ttl: nil)
       memo_mutex!.synchronize do
         @__safe_memo_cache__ ||= {}
 
@@ -49,7 +49,7 @@ module SafeMemoize
           memo_record_value(record)
         else
           value = yield
-          @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: expires_at)
+          @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: memo_expires_at(ttl))
 
           value
         end

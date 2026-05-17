@@ -792,6 +792,18 @@ RSpec.describe SafeMemoize do
         end
       end
 
+      it "measures ttl from first call, not from memoize definition" do
+        # Sleep before the first call to ensure the TTL clock starts at call time.
+        # If expires_at were fixed at class-load time this entry would already be
+        # near-expiry and the second call would recompute.
+        sleep(0.015)
+        obj = klass.new
+        obj.expensive
+        expect(obj.call_count).to eq(1)
+        obj.expensive
+        expect(obj.call_count).to eq(1) # still cached — ttl not yet elapsed
+      end
+
       it "expires memoized entries after the ttl and prunes inspection results" do
         obj = klass.new
 
