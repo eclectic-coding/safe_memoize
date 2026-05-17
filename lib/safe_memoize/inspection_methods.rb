@@ -53,9 +53,16 @@ module SafeMemoize
     end
 
     def memo_projection(cache_key, value, include_method:, include_value:)
-      method_name, args, kwargs = cache_key
+      # Custom keys are [method, custom_key] (2 elements); default keys are
+      # [method, args, kwargs] (3 elements). Detect and surface accordingly.
+      if cache_key.length == 2
+        method_name, custom_key = cache_key
+        payload = {custom_key: custom_key}
+      else
+        method_name, args, kwargs = cache_key
+        payload = {args: args, kwargs: kwargs}
+      end
 
-      payload = {args: args, kwargs: kwargs}
       payload[:method] = method_name if include_method
       payload[:value] = memo_record_value(value) if include_value
       payload

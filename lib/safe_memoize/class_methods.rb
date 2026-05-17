@@ -6,6 +6,9 @@ module SafeMemoize
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
 
+      # :if and :unless are reserved Ruby keywords, so they can't be referenced
+      # as local variables directly. binding.local_variable_get is the only way
+      # to read keyword arguments with those names inside the method body.
       cond_if = binding.local_variable_get(:if)
       cond_unless = binding.local_variable_get(:unless)
 
