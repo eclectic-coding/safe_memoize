@@ -23,7 +23,6 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Correctly memoizes `nil` and `false` return values](#nil-and-false-safety)
 - [Caches per unique arguments (positional and keyword)](#with-arguments)
 - [Thread-safe via double-check locking](#how-it-works)
-- Zero runtime dependencies
 - [Simple `prepend` + `memoize` API](#usage)
 - [Preserves public, protected, and private method visibility](#works-with-private-methods)
 - [Supports targeted cache invalidation by argument combination](#cache-reset)
@@ -37,7 +36,6 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Lifecycle hooks for hit, eviction, and expiration events](#lifecycle-hooks)
 - [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
 - [Custom cache key generation per method](#custom-cache-keys)
-- Block arguments bypass cache (blocks aren't comparable)
 
 ## Installation
 
