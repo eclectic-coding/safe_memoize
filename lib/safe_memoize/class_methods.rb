@@ -222,9 +222,14 @@ module SafeMemoize
       end
     end
 
-    def memoize_all(except: [], **options)
+    def memoize_all(except: [], include_protected: false, include_private: false, **options)
       excluded = Array(except).map(&:to_sym)
-      public_instance_methods(false).each do |method_name|
+
+      methods = public_instance_methods(false)
+      methods |= protected_instance_methods(false) if include_protected
+      methods |= private_instance_methods(false) if include_private
+
+      methods.each do |method_name|
         next if excluded.include?(method_name)
 
         memoize(method_name, **options)

@@ -159,6 +159,60 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "with include_protected: true" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def public_method = rand
+
+          protected
+
+          def protected_method = rand
+
+          memoize_all include_protected: true
+        end
+      end
+
+      it "memoizes protected methods" do
+        instance = klass.new
+        results = Array.new(3) { instance.send(:protected_method) }
+        expect(results.uniq.size).to eq(1)
+      end
+
+      it "still memoizes public methods" do
+        instance = klass.new
+        expect(instance.public_method).to eq(instance.public_method)
+      end
+    end
+
+    context "with include_private: true" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def public_method = rand
+
+          private
+
+          def private_method = rand
+
+          memoize_all include_private: true
+        end
+      end
+
+      it "memoizes private methods" do
+        instance = klass.new
+        results = Array.new(3) { instance.send(:private_method) }
+        expect(results.uniq.size).to eq(1)
+      end
+
+      it "still memoizes public methods" do
+        instance = klass.new
+        expect(instance.public_method).to eq(instance.public_method)
+      end
+    end
+
     context "isolation" do
       it "does not affect other classes" do
         klass = Class.new do
