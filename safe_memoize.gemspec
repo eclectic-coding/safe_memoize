@@ -20,7 +20,7 @@ Gem::Specification.new do |spec|
                      "Method visibility (public, protected, private) is fully preserved."
   spec.homepage = "https://github.com/eclectic-coding/safe_memoize"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.3.0"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"] = spec.homepage

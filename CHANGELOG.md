@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-17
+
+- Drop support for Ruby 3.2 (EOL); minimum required version is now Ruby 3.3
+
 ## [0.4.0] - 2026-05-17
 
 - Add `warm_memo`, `dump_memo`, and `load_memo` for cache warm-up and persistence
@@ -26,7 +30,7 @@
   - `if: ->(result) { ... }` — only caches when the lambda returns truthy
   - `unless: ->(result) { ... }` — skips caching when the lambda returns truthy
   - Uncached calls recompute on every invocation until the condition is met
-  - Compatible with `ttl:`, `max_size:`, hooks, and all inspection APIs
+    - Compatible with `ttl:`, `max_size:`, hooks, and all inspection APIs 
 - Add LRU cache size limit via `max_size:` option on `memoize`
   - Evicts the least-recently-used entry per method when the limit is reached
   - Cache hits promote entries to most-recently-used, preventing premature eviction
