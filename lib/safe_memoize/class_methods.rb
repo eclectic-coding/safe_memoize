@@ -105,6 +105,15 @@ module SafeMemoize
       prepend mod
     end
 
+    def memoize_all(except: [], **options)
+      excluded = Array(except).map(&:to_sym)
+      public_instance_methods(false).each do |method_name|
+        next if excluded.include?(method_name)
+
+        memoize(method_name, **options)
+      end
+    end
+
     private
 
     def memoized_method_visibility(method_name)

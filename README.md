@@ -35,6 +35,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
 - [Lifecycle hooks for hit, miss, eviction, and expiration events](#lifecycle-hooks)
 - [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
+- [Bulk memoization via `memoize_all`](#bulk-memoization)
 - [Custom cache key generation per method](#custom-cache-keys)
 
 ## Installation
@@ -266,6 +267,46 @@ Both options accept any callable and compose with `ttl:` and `max_size:`:
 ```ruby
 memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 ```
+
+### Bulk memoization
+
+Use `memoize_all` to memoize every public method defined on the class in one call:
+
+```ruby
+class ConfigService
+  prepend SafeMemoize
+
+  def database_url
+    ENV.fetch("DATABASE_URL")
+  end
+
+  def redis_url
+    ENV.fetch("REDIS_URL")
+  end
+
+  def feature_flags
+    fetch_flags_from_api
+  end
+
+  memoize_all
+end
+```
+
+All options accepted by `memoize` can be passed as shared options:
+
+```ruby
+memoize_all ttl: 60
+memoize_all max_size: 100
+memoize_all if: ->(result) { !result.nil? }
+```
+
+Use `except:` to skip specific methods:
+
+```ruby
+memoize_all except: [:version, :name]
+```
+
+Only public methods defined directly on the class are memoized — inherited, private, and protected methods are not affected.
 
 ### Custom cache keys
 
