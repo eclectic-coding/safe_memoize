@@ -18,6 +18,10 @@ end
 
 SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/false", so your methods are only computed once regardless of return value.
 
+## How It Works
+
+SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name`, it creates an anonymous module with a wrapper method and prepends it onto your class. The wrapper calls `super` to invoke the original method and stores the result in a per-instance hash. Thread safety is achieved with a per-instance `Mutex` using double-check locking.
+
 ## Features
 
 - [Correctly memoizes `nil` and `false` return values](#nil-and-false-safety)
@@ -518,10 +522,6 @@ obj.cache_metrics_reset      # Clears all collected metrics
 ```
 
 Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
-
-## How It Works
-
-SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name`, it creates an anonymous module with a wrapper method and prepends it onto your class. The wrapper calls `super` to invoke the original method and stores the result in a per-instance hash. Thread safety is achieved with a per-instance `Mutex` using double-check locking.
 
 ## Development
 
