@@ -2,6 +2,12 @@
 
 - Fix TTL clock starting at `memoize` definition time instead of first method call
 - Fix metrics key silently dropping kwargs, causing methods that differ only in kwargs to share a metrics bucket
+- Fix stale LRU references remaining after expired entries are pruned
+- Add `ttl:` option to `warm_memo` so warmed entries can be given an expiry
+- Add `max_size:` support for `shared: true` memoization (class-level LRU eviction)
+- Add `ttl_refresh: true` option on `memoize` for sliding window TTL — resets expiry on every cache hit
+- Add `include_protected:` and `include_private:` options to `memoize_all`
+- Add `memo_ttl_remaining` for TTL introspection — returns seconds until expiry, `nil` for no TTL, `0` for uncached/expired
 
 ## [0.5.0] - 2026-05-17
 
