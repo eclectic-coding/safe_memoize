@@ -66,7 +66,7 @@ module SafeMemoize
       end
     end
 
-    def warm_memo(method_name, *args, **kwargs, &block)
+    def warm_memo(method_name, *args, ttl: nil, **kwargs, &block)
       raise ArgumentError, "block required" unless block
 
       method_name = method_name.to_sym
@@ -75,7 +75,7 @@ module SafeMemoize
 
       with_memo_lock do
         @__safe_memo_cache__ ||= {}
-        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: nil)
+        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: memo_expires_at(ttl))
       end
 
       value

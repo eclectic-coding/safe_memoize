@@ -84,6 +84,26 @@ RSpec.describe SafeMemoize do
       instance.warm_memo(:current_user) { "warmed" }
       expect(instance.memoized?(:current_user)).to be true
     end
+
+    it "stores a warmed entry with no TTL by default" do
+      instance = test_class.new
+      instance.warm_memo(:current_user) { "warmed" }
+      expect(instance.memoized?(:current_user)).to be true
+    end
+
+    it "accepts ttl: and expires the warmed entry after the given duration" do
+      instance = test_class.new
+      instance.warm_memo(:current_user, ttl: 0.01) { "warmed" }
+      expect(instance.current_user).to eq("warmed")
+      sleep(0.02)
+      expect(instance.memoized?(:current_user)).to be false
+    end
+
+    it "passes remaining kwargs through to the cache key when ttl: is given" do
+      instance = test_class.new
+      instance.warm_memo(:search, "ruby", page: 2, ttl: 60) { "results" }
+      expect(instance.search("ruby", page: 2)).to eq("results")
+    end
   end
 
   describe "#dump_memo" do
