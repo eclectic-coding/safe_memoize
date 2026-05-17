@@ -35,6 +35,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
 - [Lifecycle hooks for hit, miss, eviction, and expiration events](#lifecycle-hooks)
 - [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
+- [Class-level shared cache via `shared: true`](#shared-cache)
 - [Bulk memoization via `memoize_all`](#bulk-memoization)
 - [Custom cache key generation per method](#custom-cache-keys)
 
@@ -267,6 +268,46 @@ Both options accept any callable and compose with `ttl:` and `max_size:`:
 ```ruby
 memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 ```
+
+### Shared cache
+
+Pass `shared: true` to store results on the class instead of per-instance. All instances share one cache, so the method is computed only once regardless of how many objects exist.
+
+```ruby
+class ConfigService
+  prepend SafeMemoize
+
+  def database_url
+    ENV.fetch("DATABASE_URL")
+  end
+
+  def feature_flags
+    fetch_flags_from_api
+  end
+
+  memoize :database_url, shared: true
+  memoize :feature_flags, shared: true, ttl: 300
+end
+
+ConfigService.new.database_url  # computes
+ConfigService.new.database_url  # returns cached — no recomputation
+```
+
+Class-level invalidation and inspection:
+
+```ruby
+ConfigService.reset_shared_memo(:feature_flags)       # Clears all entries for one method
+ConfigService.reset_shared_memo(:find, user_id)       # Clears one argument combination
+ConfigService.reset_all_shared_memos                  # Clears all shared cached entries
+ConfigService.shared_memoized?(:database_url)         # => true
+ConfigService.shared_memoized?(:find, user_id)        # Checks one argument combination
+ConfigService.shared_memo_count                       # Total shared cached entries
+ConfigService.shared_memo_count(:find)                # Entries for one method
+```
+
+`shared: true` supports `ttl:`, `if:`, and `unless:` options. `max_size:` is not supported (shared LRU may be added in a future release).
+
+Hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`) fire on the calling instance as usual.
 
 ### Bulk memoization
 
