@@ -33,7 +33,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Optional TTL expiration support for cached entries](#ttl-expiration)
 - [Optional LRU cache size limit per method via `max_size:`](#lru-cache-size-limit)
 - [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
-- [Lifecycle hooks for hit, eviction, and expiration events](#lifecycle-hooks)
+- [Lifecycle hooks for hit, miss, eviction, and expiration events](#lifecycle-hooks)
 - [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
 - [Custom cache key generation per method](#custom-cache-keys)
 
@@ -149,6 +149,14 @@ obj.on_memo_evict do |cache_key, record|
 end
 ```
 
+**`on_memo_miss`** fires on every cache miss (i.e. the first call or after invalidation):
+
+```ruby
+obj.on_memo_miss do |cache_key, record|
+  Rails.logger.debug("Cache miss: #{cache_key[0]}(#{cache_key[1].join(", ")})")
+end
+```
+
 **`on_memo_hit`** fires on every cache hit:
 
 ```ruby
@@ -168,6 +176,8 @@ end
 Multiple hooks of the same type can be registered and all will fire. Remove them with `clear_memo_hooks`:
 
 ```ruby
+obj.clear_memo_hooks(:on_miss)    # Clears miss hooks only
+obj.clear_memo_hooks(:on_hit)     # Clears hit hooks only
 obj.clear_memo_hooks(:on_evict)   # Clears evict hooks only
 obj.clear_memo_hooks(:on_expire)  # Clears expire hooks only
 obj.clear_memo_hooks              # Clears all hooks
