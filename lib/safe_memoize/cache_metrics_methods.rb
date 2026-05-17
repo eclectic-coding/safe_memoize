@@ -8,15 +8,15 @@ module SafeMemoize
       @__safe_memo_metrics__ ||= {}
     end
 
-    def record_cache_hit(method_name, args)
-      cache_key = safe_memo_cache_key(method_name, args, {})
+    def record_cache_hit(method_name, args, kwargs)
+      cache_key = safe_memo_cache_key(method_name, args, kwargs)
       metrics = memo_metrics_store
       metrics[cache_key] ||= {hits: 0, misses: 0, total_time: 0.0}
       metrics[cache_key][:hits] += 1
     end
 
-    def record_cache_miss(method_name, args, computation_time)
-      cache_key = safe_memo_cache_key(method_name, args, {})
+    def record_cache_miss(method_name, args, kwargs, computation_time)
+      cache_key = safe_memo_cache_key(method_name, args, kwargs)
       metrics = memo_metrics_store
       metrics[cache_key] ||= {hits: 0, misses: 0, total_time: 0.0}
       metrics[cache_key][:misses] += 1
