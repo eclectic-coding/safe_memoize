@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-17
+
 - Add `warm_memo`, `dump_memo`, and `load_memo` for cache warm-up and persistence
   - `warm_memo(:method, *args, **kwargs) { value }` — pre-populates a cache entry via block without calling the method
   - `dump_memo` / `dump_memo(:method)` — exports live cached entries as a plain `{[method, args, kwargs] => value}` hash
