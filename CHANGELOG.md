@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Add `on_memo_miss` hook that fires on every cache miss, completing the full lifecycle hook set alongside `on_memo_hit`, `on_memo_evict`, and `on_memo_expire`
+
 ## [0.3.0] - 2026-05-15
 
 - Add `on_memo_hit` hook that fires on every cache hit, completing the lifecycle API alongside `on_memo_expire` and `on_memo_evict`
