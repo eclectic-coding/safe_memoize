@@ -339,6 +339,64 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "memo_ttl_remaining" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+          def keyed(x) = x
+
+          memoize :value, ttl: 60
+          memoize :keyed, ttl: 60
+        end
+      end
+
+      it "returns 0 when the entry has not been cached yet" do
+        expect(klass.new.memo_ttl_remaining(:value)).to eq(0)
+      end
+
+      it "returns nil when the method has no TTL" do
+        klass2 = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+          memoize :value
+        end
+        obj = klass2.new
+        obj.value
+        expect(obj.memo_ttl_remaining(:value)).to be_nil
+      end
+
+      it "returns a positive number of seconds remaining" do
+        obj = klass.new
+        obj.value
+        remaining = obj.memo_ttl_remaining(:value)
+        expect(remaining).to be > 0
+        expect(remaining).to be <= 60
+      end
+
+      it "returns 0 after the entry expires" do
+        klass2 = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+          memoize :value, ttl: 0.01
+        end
+        obj = klass2.new
+        obj.value
+        sleep(0.02)
+        expect(obj.memo_ttl_remaining(:value)).to eq(0)
+      end
+
+      it "scopes to a specific argument combination" do
+        obj = klass.new
+        obj.keyed(1)
+        expect(obj.memo_ttl_remaining(:keyed, 1)).to be > 0
+        expect(obj.memo_ttl_remaining(:keyed, 2)).to eq(0)
+      end
+    end
+
     context "cache inspection" do
       it "returns whether a zero-argument method has been memoized" do
         klass = Class.new do

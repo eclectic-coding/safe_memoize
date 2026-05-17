@@ -12,6 +12,21 @@ module SafeMemoize
       end
     end
 
+    def memo_ttl_remaining(method_name, *args, **kwargs)
+      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+
+      with_memo_lock do
+        record = memo_cache_record(cache_key)
+        return 0 unless record
+
+        expires_at = record[:expires_at]
+        return nil unless expires_at
+
+        remaining = expires_at - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        (remaining > 0) ? remaining.round(6) : 0
+      end
+    end
+
     def memo_count(*method_name)
       scoped_method = safe_memo_scoped_method(method_name)
 
