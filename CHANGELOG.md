@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-17
+
 - Fix TTL clock starting at `memoize` definition time instead of first method call
 - Fix metrics key silently dropping kwargs, causing methods that differ only in kwargs to share a metrics bucket
 - Fix stale LRU references remaining after expired entries are pruned
