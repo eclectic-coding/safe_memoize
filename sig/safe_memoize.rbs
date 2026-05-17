@@ -11,12 +11,13 @@ module SafeMemoize
   @__safe_memo_mutex__: Mutex?
   @__safe_memo_shared_cache__: Hash[memo_key, memo_record]?
   @__safe_memo_shared_mutex__: Mutex?
+  @__safe_memo_shared_lru_order__: Hash[Symbol, Hash[memo_key, true]]?
 
   def self.prepended: (Class base) -> void
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool) -> void
-    def memoize_all: (?except: Array[Symbol | String], ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool) -> void
+    def memoize_all: (?except: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
     def shared_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
@@ -26,6 +27,7 @@ module SafeMemoize
 
     def __safe_memo_shared_cache__: () -> Hash[memo_key, memo_record]
     def __safe_memo_shared_mutex__: () -> Mutex
+    def __safe_memo_shared_lru_order__: () -> Hash[Symbol, Hash[memo_key, true]]
     def memoized_method_visibility: (Symbol method_name) -> Symbol
   end
 
@@ -33,6 +35,7 @@ module SafeMemoize
     @__safe_memo_cache__: Hash[memo_key, memo_record]?
 
     def memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) ?{ () -> untyped } -> bool
+    def memo_ttl_remaining: (Symbol | String method_name, *untyped args, **untyped kwargs) -> (Float | Integer | nil)
     def memo_count: (*untyped method_name) -> Integer
     def memo_keys: (*untyped method_name) -> Array[untyped]
     def memo_values: (*untyped method_name) -> Array[untyped]
@@ -41,7 +44,7 @@ module SafeMemoize
     def on_memo_hit: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def on_memo_miss: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def clear_memo_hooks: (Symbol? hook_type) -> void
-    def warm_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) { () -> untyped } -> untyped
+    def warm_memo: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) { () -> untyped } -> untyped
     def dump_memo: (?Symbol | String method_name) -> Hash[memo_key, untyped]
     def load_memo: (Hash[memo_key, untyped] snapshot) -> nil
     def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
@@ -59,7 +62,7 @@ module SafeMemoize
     def memo_cache_hit?: (memo_key cache_key) -> bool
     def memo_cache_record: (memo_key cache_key) -> memo_record?
     def memo_cache_read: (memo_key cache_key) -> untyped?
-    def memo_fetch_or_store: (memo_key cache_key) { () -> untyped } -> untyped
+    def memo_fetch_or_store: (memo_key cache_key, ?ttl: Float?) { () -> untyped } -> untyped
     def memo_mutex!: () -> Mutex
     def with_memo_cache: { (Hash[memo_key, memo_record] cache) -> untyped } -> untyped?
   end
@@ -105,8 +108,8 @@ module SafeMemoize
     private
 
     def memo_metrics_store: () -> Hash[memo_key, { hits: Integer, misses: Integer, total_time: Float }]
-    def record_cache_hit: (Symbol method_name, Array[untyped] args) -> void
-    def record_cache_miss: (Symbol method_name, Array[untyped] args, Float computation_time) -> void
+    def record_cache_hit: (Symbol method_name, Array[untyped] args, Hash[Symbol, untyped] kwargs) -> void
+    def record_cache_miss: (Symbol method_name, Array[untyped] args, Hash[Symbol, untyped] kwargs, Float computation_time) -> void
     def _reset_cache_metrics: () -> void
   end
 
@@ -142,6 +145,7 @@ module SafeMemoize
     def lru_order_store: () -> Hash[Symbol, Hash[memo_key, true]]
     def lru_touch: (Symbol method_name, memo_key cache_key) -> void
     def lru_evict_if_over_limit: (Symbol method_name, Integer max_size) -> void
+    def lru_remove: (Symbol method_name, memo_key cache_key) -> void
     def lru_clear_all: () -> void
   end
 

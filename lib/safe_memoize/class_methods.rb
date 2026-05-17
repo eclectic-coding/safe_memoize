@@ -2,7 +2,7 @@
 
 module SafeMemoize
   module ClassMethods
-    def memoize(method_name, ttl: nil, max_size: nil, if: nil, unless: nil, shared: false)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false)
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
 
@@ -12,6 +12,7 @@ module SafeMemoize
       ttl = if ttl.nil?
         nil
       else
+
         ttl = Float(ttl)
         raise ArgumentError, "ttl must be non-negative" if ttl < 0
 
@@ -27,7 +28,7 @@ module SafeMemoize
         max_size
       end
 
-      raise ArgumentError, "max_size: is not supported with shared: true" if shared && max_size
+      raise ArgumentError, "ttl_refresh: requires a ttl: to be set" if ttl_refresh && ttl.nil?
 
       if cond_if && cond_unless
         raise ArgumentError, "cannot specify both :if and :unless"
@@ -59,6 +60,12 @@ module SafeMemoize
               record_live = record && (record[:expires_at].nil? || record[:expires_at] > now)
 
               if record_live
+                if max_size
+                  lru = klass.send(:__safe_memo_shared_lru_order__)[method_name] ||= {}
+                  lru.delete(cache_key)
+                  lru[cache_key] = true
+                end
+                record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
                 record_cache_hit(method_name, args, kwargs)
                 call_memo_hooks(:on_hit, cache_key, record)
                 record[:value]
@@ -70,7 +77,24 @@ module SafeMemoize
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
                 new_record = {value: value, expires_at: memo_expires_at(ttl)}
-                shared_cache[cache_key] = new_record unless condition && !condition.call(value)
+
+                if !condition || condition.call(value)
+                  if max_size
+                    lru = klass.send(:__safe_memo_shared_lru_order__)[method_name] ||= {}
+                    lru.delete_if { |key, _| !shared_cache.key?(key) }
+                    if lru.size >= max_size
+                      lru_key = lru.keys.first
+                      lru.delete(lru_key)
+                      evicted = shared_cache.delete(lru_key)
+                      call_memo_hooks(:on_evict, lru_key, evicted) if evicted
+                    end
+                  end
+                  shared_cache[cache_key] = new_record
+                  if max_size
+                    lru = klass.send(:__safe_memo_shared_lru_order__)[method_name] ||= {}
+                    lru[cache_key] = true
+                  end
+                end
 
                 record_cache_miss(method_name, args, kwargs, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
@@ -95,12 +119,13 @@ module SafeMemoize
 
           cache_key = compute_cache_key(method_name, args, kwargs)
 
-          if max_size || condition
-            # Locked path: used when LRU tracking or conditional storage is needed.
+          if max_size || condition || ttl_refresh
+            # Locked path: used when LRU tracking, conditional storage, or TTL refresh is needed.
             memo_mutex!.synchronize do
               record = memo_cache_record(cache_key)
               if record
                 lru_touch(method_name, cache_key) if max_size
+                record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
                 record_cache_hit(method_name, args, kwargs)
                 call_memo_hooks(:on_hit, cache_key, record)
                 memo_record_value(record)
@@ -153,21 +178,23 @@ module SafeMemoize
 
     def reset_shared_memo(method_name, *args, **kwargs)
       method_name = method_name.to_sym
-      matcher = if args.empty? && kwargs.empty?
-        ->(key) { key[0] == method_name }
-      else
-        cache_key = [method_name, args, kwargs]
-        ->(key) { key == cache_key }
-      end
+      specific_key = (args.empty? && kwargs.empty?) ? nil : [method_name, args, kwargs]
 
       __safe_memo_shared_mutex__.synchronize do
-        __safe_memo_shared_cache__.delete_if { |key, _| matcher.call(key) }
+        if specific_key
+          __safe_memo_shared_cache__.delete(specific_key)
+          __safe_memo_shared_lru_order__[method_name]&.delete(specific_key)
+        else
+          __safe_memo_shared_cache__.delete_if { |key, _| key[0] == method_name }
+          __safe_memo_shared_lru_order__.delete(method_name)
+        end
       end
     end
 
     def reset_all_shared_memos
       __safe_memo_shared_mutex__.synchronize do
         @__safe_memo_shared_cache__ = {}
+        @__safe_memo_shared_lru_order__ = {}
       end
     end
 
@@ -195,9 +222,14 @@ module SafeMemoize
       end
     end
 
-    def memoize_all(except: [], **options)
+    def memoize_all(except: [], include_protected: false, include_private: false, **options)
       excluded = Array(except).map(&:to_sym)
-      public_instance_methods(false).each do |method_name|
+
+      methods = public_instance_methods(false)
+      methods |= protected_instance_methods(false) if include_protected
+      methods |= private_instance_methods(false) if include_private
+
+      methods.each do |method_name|
         next if excluded.include?(method_name)
 
         memoize(method_name, **options)
@@ -212,6 +244,10 @@ module SafeMemoize
 
     def __safe_memo_shared_mutex__
       @__safe_memo_shared_mutex__ ||= Mutex.new
+    end
+
+    def __safe_memo_shared_lru_order__
+      @__safe_memo_shared_lru_order__ ||= {}
     end
 
     def memoized_method_visibility(method_name)

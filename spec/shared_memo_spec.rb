@@ -226,15 +226,52 @@ RSpec.describe SafeMemoize do
     end
 
     describe "with max_size:" do
-      it "raises ArgumentError" do
-        expect do
-          Class.new do
-            prepend SafeMemoize
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
 
-            def value = rand
-            memoize :value, shared: true, max_size: 10
-          end
-        end.to raise_error(ArgumentError, /max_size.*shared/)
+          def fetch(n) = n * 10
+          memoize :fetch, shared: true, max_size: 2
+        end
+      end
+
+      after { klass.reset_all_shared_memos }
+
+      it "caches up to max_size entries across instances" do
+        klass.new.fetch(1)
+        klass.new.fetch(2)
+        expect(klass.shared_memo_count(:fetch)).to eq(2)
+      end
+
+      it "evicts the least recently used entry when the limit is exceeded" do
+        klass.new.fetch(1)
+        klass.new.fetch(2)
+        klass.new.fetch(3)
+        expect(klass.shared_memo_count(:fetch)).to eq(2)
+        expect(klass.shared_memoized?(:fetch, 1)).to be false
+        expect(klass.shared_memoized?(:fetch, 2)).to be true
+        expect(klass.shared_memoized?(:fetch, 3)).to be true
+      end
+
+      it "updates LRU order on a cache hit" do
+        a = klass.new
+        a.fetch(1)
+        a.fetch(2)
+        a.fetch(1) # promote 1 to MRU
+        klass.new.fetch(3) # should evict 2, not 1
+        expect(klass.shared_memoized?(:fetch, 1)).to be true
+        expect(klass.shared_memoized?(:fetch, 2)).to be false
+        expect(klass.shared_memoized?(:fetch, 3)).to be true
+      end
+
+      it "fires on_evict on the calling instance when a shared entry is LRU-evicted" do
+        evicted = []
+        instance = klass.new
+        instance.on_memo_evict { |key, _| evicted << key }
+        klass.new.fetch(1)
+        klass.new.fetch(2)
+        instance.fetch(3) # this instance triggers the eviction
+        expect(evicted).not_to be_empty
       end
     end
 

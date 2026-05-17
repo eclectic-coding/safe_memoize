@@ -339,6 +339,64 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "memo_ttl_remaining" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+          def keyed(x) = x
+
+          memoize :value, ttl: 60
+          memoize :keyed, ttl: 60
+        end
+      end
+
+      it "returns 0 when the entry has not been cached yet" do
+        expect(klass.new.memo_ttl_remaining(:value)).to eq(0)
+      end
+
+      it "returns nil when the method has no TTL" do
+        klass2 = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+          memoize :value
+        end
+        obj = klass2.new
+        obj.value
+        expect(obj.memo_ttl_remaining(:value)).to be_nil
+      end
+
+      it "returns a positive number of seconds remaining" do
+        obj = klass.new
+        obj.value
+        remaining = obj.memo_ttl_remaining(:value)
+        expect(remaining).to be > 0
+        expect(remaining).to be <= 60
+      end
+
+      it "returns 0 after the entry expires" do
+        klass2 = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+          memoize :value, ttl: 0.01
+        end
+        obj = klass2.new
+        obj.value
+        sleep(0.02)
+        expect(obj.memo_ttl_remaining(:value)).to eq(0)
+      end
+
+      it "scopes to a specific argument combination" do
+        obj = klass.new
+        obj.keyed(1)
+        expect(obj.memo_ttl_remaining(:keyed, 1)).to be > 0
+        expect(obj.memo_ttl_remaining(:keyed, 2)).to eq(0)
+      end
+    end
+
     context "cache inspection" do
       it "returns whether a zero-argument method has been memoized" do
         klass = Class.new do
@@ -822,6 +880,71 @@ RSpec.describe SafeMemoize do
 
         expect(obj.expensive).to eq("result")
         expect(obj.call_count).to eq(2)
+      end
+    end
+
+    context "ttl_refresh: true" do
+      it "raises ArgumentError when used without ttl:" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def value = 1
+            memoize :value, ttl_refresh: true
+          end
+        end.to raise_error(ArgumentError, /ttl_refresh.*ttl/)
+      end
+
+      it "resets the expiry clock on every cache hit" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+          def initialize = (@call_count = 0)
+          def compute = (@call_count += 1)
+          memoize :compute, ttl: 0.03, ttl_refresh: true
+        end
+
+        obj = klass.new
+        obj.compute               # miss — starts TTL
+        sleep(0.02)
+        obj.compute               # hit — refreshes TTL
+        sleep(0.02)
+        expect(obj.compute).to eq(1)   # still cached — TTL was refreshed
+        expect(obj.call_count).to eq(1)
+      end
+
+      it "expires after a full ttl of inactivity" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+          def initialize = (@call_count = 0)
+          def compute = (@call_count += 1)
+          memoize :compute, ttl: 0.02, ttl_refresh: true
+        end
+
+        obj = klass.new
+        obj.compute
+        sleep(0.04)
+        obj.compute               # expired — recomputes
+        expect(obj.call_count).to eq(2)
+      end
+
+      it "works with shared: true" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true, ttl: 0.03, ttl_refresh: true
+        end
+
+        first = klass.new.value
+        sleep(0.02)
+        klass.new.value           # hit — refreshes shared TTL
+        sleep(0.02)
+        expect(klass.new.value).to eq(first) # still cached
+        klass.reset_all_shared_memos
       end
     end
 

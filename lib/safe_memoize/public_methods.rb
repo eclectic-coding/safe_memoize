@@ -12,6 +12,21 @@ module SafeMemoize
       end
     end
 
+    def memo_ttl_remaining(method_name, *args, **kwargs)
+      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+
+      with_memo_lock do
+        record = memo_cache_record(cache_key)
+        return 0 unless record
+
+        expires_at = record[:expires_at]
+        return nil unless expires_at
+
+        remaining = expires_at - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        (remaining > 0) ? remaining.round(6) : 0
+      end
+    end
+
     def memo_count(*method_name)
       scoped_method = safe_memo_scoped_method(method_name)
 
@@ -66,7 +81,7 @@ module SafeMemoize
       end
     end
 
-    def warm_memo(method_name, *args, **kwargs, &block)
+    def warm_memo(method_name, *args, ttl: nil, **kwargs, &block)
       raise ArgumentError, "block required" unless block
 
       method_name = method_name.to_sym
@@ -75,7 +90,7 @@ module SafeMemoize
 
       with_memo_lock do
         @__safe_memo_cache__ ||= {}
-        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: nil)
+        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: memo_expires_at(ttl))
       end
 
       value
