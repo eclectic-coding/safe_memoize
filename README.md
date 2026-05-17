@@ -35,6 +35,7 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 - [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
 - [Lifecycle hooks for hit, miss, eviction, and expiration events](#lifecycle-hooks)
 - [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
+- [Cache warm-up, export, and restore (`warm_memo`, `dump_memo`, `load_memo`)](#cache-warm-up-and-persistence)
 - [Class-level shared cache via `shared: true`](#shared-cache)
 - [Bulk memoization via `memoize_all`](#bulk-memoization)
 - [Custom cache key generation per method](#custom-cache-keys)
@@ -268,6 +269,49 @@ Both options accept any callable and compose with `ttl:` and `max_size:`:
 ```ruby
 memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 ```
+
+### Cache warm-up and persistence
+
+#### Warming individual entries
+
+Use `warm_memo` to pre-populate a cache entry without calling the method. The block provides the value:
+
+```ruby
+obj.warm_memo(:current_user) { User.find(session[:user_id]) }
+obj.warm_memo(:find, 42) { cached_user }
+obj.warm_memo(:search, "ruby", page: 2) { cached_results }
+```
+
+Useful for seeding the cache from a persistent store on startup, or overriding a cached value in tests.
+
+#### Exporting and restoring the cache
+
+`dump_memo` exports all live cached entries as a plain hash keyed by `[method, args, kwargs]`:
+
+```ruby
+snapshot = obj.dump_memo              # All methods
+snapshot = obj.dump_memo(:find)       # One method only
+# => { [:find, [1], {}] => <User>, [:find, [2], {}] => <User>, ... }
+```
+
+`load_memo` restores entries from a snapshot — merging into the existing cache without evicting unrelated entries:
+
+```ruby
+obj.load_memo(snapshot)
+```
+
+Together they enable cross-request or cross-process cache persistence:
+
+```ruby
+# On shutdown — save to Redis
+redis.set("cache:#{user_id}", Marshal.dump(obj.dump_memo))
+
+# On boot — restore from Redis
+raw = redis.get("cache:#{user_id}")
+obj.load_memo(Marshal.load(raw)) if raw
+```
+
+Loaded entries have no TTL — they persist until explicitly reset. Expired entries are excluded from `dump_memo` output, so snapshots never contain stale data.
 
 ### Shared cache
 

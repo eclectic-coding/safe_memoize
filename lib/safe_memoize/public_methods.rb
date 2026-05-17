@@ -66,6 +66,45 @@ module SafeMemoize
       end
     end
 
+    def warm_memo(method_name, *args, **kwargs, &block)
+      raise ArgumentError, "block required" unless block
+
+      method_name = method_name.to_sym
+      cache_key = compute_cache_key(method_name, args, kwargs)
+      value = block.call
+
+      with_memo_lock do
+        @__safe_memo_cache__ ||= {}
+        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: nil)
+      end
+
+      value
+    end
+
+    def dump_memo(method_name = nil)
+      method_name = method_name&.to_sym
+
+      with_memo_lock do
+        cache = memo_cache_or_nil || {}
+        entries = method_name ? cache.select { |key, _| key[0] == method_name } : cache.dup
+        entries.select! { |_, record| memo_record_live?(record) }
+        entries.transform_values { |record| memo_record_value(record) }
+      end
+    end
+
+    def load_memo(snapshot)
+      raise ArgumentError, "snapshot must be a Hash" unless snapshot.is_a?(Hash)
+
+      with_memo_lock do
+        @__safe_memo_cache__ ||= {}
+        snapshot.each do |cache_key, value|
+          @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: nil)
+        end
+      end
+
+      nil
+    end
+
     def reset_memo(method_name, *args, **kwargs)
       method_name = method_name.to_sym
 
