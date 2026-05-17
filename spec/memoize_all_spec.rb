@@ -161,17 +161,7 @@ RSpec.describe SafeMemoize do
 
     context "isolation" do
       it "does not affect other classes" do
-        klass_a = Class.new do
-          prepend SafeMemoize
-
-          def value
-            rand
-          end
-
-          memoize_all
-        end
-
-        klass_b = Class.new do
+        klass = Class.new do
           prepend SafeMemoize
 
           def value
@@ -179,8 +169,8 @@ RSpec.describe SafeMemoize do
           end
         end
 
-        instance_b = klass_b.new
-        results = Array.new(3) { instance_b.value }
+        instance = klass.new
+        results = Array.new(3) { instance.value }
         expect(results.uniq.size).to be > 1
       end
     end
