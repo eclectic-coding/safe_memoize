@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-18
+
 - Add `memo_preload` to batch-warm multiple cache entries in one call
   - `obj.memo_preload(:find, [1], [2], [3])` calls the memoized method for each arg set and caches all results
   - Returns an array of results in the same order as the input arg sets
