@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+- Achieve 100% line coverage across all lib files
+  - Add SimpleCov filter to exclude `/spec` from coverage reporting
+  - Add tests for `memo_ttl` in `CacheRecordMethods` covering nil, valid numeric, negative, and non-numeric inputs
+  - Add tests for private `memo_cache_read` in `CacheStoreMethods` covering nil cache, live hit, and expired entry
+  - Add tests for `memo_keys` / `memo_values` with custom-key entries, covering the `custom_key:` projection branch in `InspectionMethods`
+  - Add missing error-case tests for `ReleaseTooling.update_version_file` (no VERSION constant) and `finalize_changelog` (no Unreleased heading)
+
 ## [0.6.1] - 2026-05-17
 
 - Fix `memo_keys` and `memo_values` showing `args: custom_key, kwargs: nil` for methods using `memoize_with_custom_key` — now surfaces as `custom_key:`
@@ -18,7 +25,7 @@
 
 ## [0.5.0] - 2026-05-17
 
-- Drop support for Ruby 3.2 (EOL); minimum required version is now Ruby 3.3
+- Drop support for Ruby 3.2 (EOL); minimum required version is now Ruby 3.3 
 
 ## [0.4.0] - 2026-05-17
 

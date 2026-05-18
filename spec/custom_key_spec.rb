@@ -265,6 +265,37 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    describe "custom keys with memo_keys and memo_values" do
+      it "memo_keys surfaces the custom_key field instead of args/kwargs" do
+        instance = test_class.new
+
+        instance.memoize_with_custom_key(:compute_value) do |user_id, _|
+          user_id
+        end
+
+        instance.compute_value(42, {})
+
+        keys = instance.memo_keys(:compute_value)
+        expect(keys.length).to eq(1)
+        expect(keys.first).to include(custom_key: 42)
+        expect(keys.first).not_to have_key(:args)
+      end
+
+      it "memo_values surfaces the custom_key field and the cached value" do
+        instance = test_class.new
+
+        instance.memoize_with_custom_key(:compute_value) do |user_id, _|
+          user_id
+        end
+
+        instance.compute_value(7, {opt: true})
+
+        values = instance.memo_values(:compute_value)
+        expect(values.length).to eq(1)
+        expect(values.first).to include(custom_key: 7, value: "result_7_{opt: true}")
+      end
+    end
+
     describe "custom keys with default arguments" do
       it "supports methods with default arguments" do
         test_class_with_defaults = Class.new do
