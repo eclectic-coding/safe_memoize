@@ -4,6 +4,7 @@ RSpec.describe SafeMemoize::CacheRecordMethods do
   let(:helper) do
     Class.new do
       include SafeMemoize::CacheRecordMethods
+
       public :memo_ttl
     end.new
   end
