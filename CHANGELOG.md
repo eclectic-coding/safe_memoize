@@ -6,6 +6,9 @@
   - Composes with all existing options (`ttl:`, `max_size:`, `shared:`, `if:`, etc.)
   - Raises `ArgumentError` if `key:` is not callable
 - Add `shared:` support to `memoize_all` (was already functional via `**options` passthrough; now tested and documented)
+- Add `memo_refresh` to force-recompute a cached entry and store the new value in one call
+- Add `memo_age` to return how many seconds ago an entry was cached (`nil` if not cached or expired)
+- Add `memo_stale?` to check whether a cached entry exists but its TTL has elapsed
 
 ## [0.6.3] - 2026-05-18
 
