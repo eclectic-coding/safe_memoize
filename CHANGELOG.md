@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+- Add `SafeMemoize.configure` for global default options
+  - `SafeMemoize.configure { |c| c.default_ttl = 60 }` applies a TTL to all subsequently memoized methods
+  - `SafeMemoize.configure { |c| c.default_max_size = 100 }` sets a global LRU size limit
+  - Per-call options (`ttl:`, `max_size:`) override the global defaults
+  - `SafeMemoize.reset_configuration!` restores defaults to `nil`
+- Add `memo_touch` to reset the expiry clock on a cached entry without recomputing
+  - `memo_touch(:method, *args)` extends the entry's TTL from now using the original TTL window
+  - `memo_touch(:method, *args, ttl: 30)` sets a new TTL explicitly
+  - Returns `true` on success, `false` if the entry is not cached or already expired
+- Add `shared_memo_age` class method to inspect how long ago a shared entry was cached
+- Add `shared_memo_stale?` class method to check whether a shared entry's TTL has elapsed
+- Update RBS type signatures for all new methods and the `Configuration` class
 - Add `key:` option to `memoize` for class-level cache key generation
   - `memoize :method, key: ->(a, b) { a }` defines a key generator at the class level — calls whose key block returns the same value share one cache entry
   - Instance-level `memoize_with_custom_key` still takes priority over `key:`
