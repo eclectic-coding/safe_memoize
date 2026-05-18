@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+- Add `key:` option to `memoize` for class-level cache key generation
+  - `memoize :method, key: ->(a, b) { a }` defines a key generator at the class level — calls whose key block returns the same value share one cache entry
+  - Instance-level `memoize_with_custom_key` still takes priority over `key:`
+  - Composes with all existing options (`ttl:`, `max_size:`, `shared:`, `if:`, etc.)
+  - Raises `ArgumentError` if `key:` is not callable
+- Add `shared:` support to `memoize_all` (was already functional via `**options` passthrough; now tested and documented)
+
 ## [0.6.3] - 2026-05-18
 
 - Upgrade `softprops/action-gh-release` from v2 to v3 to resolve Node.js 20 deprecation warning in release workflow
