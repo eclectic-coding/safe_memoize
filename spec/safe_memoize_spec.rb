@@ -397,6 +397,166 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "memo_refresh" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          attr_reader :call_count
+
+          def initialize
+            @call_count = 0
+          end
+
+          def value
+            @call_count += 1
+            @call_count
+          end
+
+          def keyed(x)
+            @call_count += 1
+            x * @call_count
+          end
+
+          memoize :value
+          memoize :keyed
+        end
+      end
+
+      it "recomputes and updates the cached value" do
+        obj = klass.new
+        first = obj.value
+        result = obj.memo_refresh(:value)
+        expect(result).not_to eq(first)
+        expect(obj.value).to eq(result)
+      end
+
+      it "returns the newly computed value" do
+        obj = klass.new
+        obj.value
+        expect(obj.memo_refresh(:value)).to eq(2)
+      end
+
+      it "recomputes only the matching argument entry" do
+        obj = klass.new
+        obj.keyed(1)
+        obj.keyed(2)
+        obj.memo_refresh(:keyed, 1)
+        expect(obj.call_count).to eq(3)
+      end
+
+      it "works on a method that has not been cached yet" do
+        obj = klass.new
+        expect { obj.memo_refresh(:value) }.not_to raise_error
+        expect(obj.call_count).to eq(1)
+      end
+    end
+
+    context "memo_age" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value
+        end
+      end
+
+      it "returns nil when the entry has not been cached" do
+        expect(klass.new.memo_age(:value)).to be_nil
+      end
+
+      it "returns a non-negative float after the entry is cached" do
+        obj = klass.new
+        obj.value
+        expect(obj.memo_age(:value)).to be >= 0
+        expect(obj.memo_age(:value)).to be_a(Float)
+      end
+
+      it "grows over time" do
+        obj = klass.new
+        obj.value
+        age1 = obj.memo_age(:value)
+        sleep(0.02)
+        age2 = obj.memo_age(:value)
+        expect(age2).to be > age1
+      end
+
+      it "returns nil after the entry expires" do
+        klass2 = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 0.01
+        end
+        obj = klass2.new
+        obj.value
+        sleep(0.02)
+        expect(obj.memo_age(:value)).to be_nil
+      end
+
+      it "returns age for a warmed entry" do
+        obj = klass.new
+        obj.warm_memo(:value) { 42 }
+        expect(obj.memo_age(:value)).to be >= 0
+      end
+    end
+
+    context "memo_stale?" do
+      it "returns false when the entry has not been cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value
+        end
+        expect(klass.new.memo_stale?(:value)).to be(false)
+      end
+
+      it "returns false for a live cached entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 60
+        end
+        obj = klass.new
+        obj.value
+        expect(obj.memo_stale?(:value)).to be(false)
+      end
+
+      it "returns false for an entry with no TTL" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value
+        end
+        obj = klass.new
+        obj.value
+        expect(obj.memo_stale?(:value)).to be(false)
+      end
+
+      it "returns true after the TTL has elapsed" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 0.01
+        end
+        obj = klass.new
+        obj.value
+        sleep(0.02)
+        expect(obj.memo_stale?(:value)).to be(true)
+      end
+    end
+
     context "cache inspection" do
       it "returns whether a zero-argument method has been memoized" do
         klass = Class.new do
