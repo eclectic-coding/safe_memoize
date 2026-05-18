@@ -120,6 +120,40 @@ module SafeMemoize
       nil
     end
 
+    def memo_refresh(method_name, *args, **kwargs)
+      method_name = method_name.to_sym
+      reset_memo(method_name, *args, **kwargs)
+      send(method_name, *args, **kwargs)
+    end
+
+    def memo_age(method_name, *args, **kwargs)
+      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+
+      with_memo_lock do
+        record = memo_cache_record(cache_key)
+        return nil unless record
+
+        cached_at = record[:cached_at]
+        return nil unless cached_at
+
+        (Process.clock_gettime(Process::CLOCK_MONOTONIC) - cached_at).round(6)
+      end
+    end
+
+    def memo_stale?(method_name, *args, **kwargs)
+      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+
+      with_memo_lock do
+        cache = memo_cache_or_nil
+        return false unless cache
+
+        record = cache[cache_key]
+        return false unless record
+
+        !memo_record_live?(record)
+      end
+    end
+
     def reset_memo(method_name, *args, **kwargs)
       method_name = method_name.to_sym
 

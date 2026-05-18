@@ -22,7 +22,7 @@ module SafeMemoize
     end
 
     def memo_record(value, expires_at:)
-      {value: value, expires_at: expires_at}
+      {value: value, expires_at: expires_at, cached_at: Process.clock_gettime(Process::CLOCK_MONOTONIC)}
     end
 
     def memo_record_value(record)
