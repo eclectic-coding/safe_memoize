@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Upgrade `softprops/action-gh-release` from v2 to v3 to resolve Node.js 20 deprecation warning in release workflow
+
 ## [0.6.2] - 2026-05-18
 
 - Achieve 100% line coverage across all lib files
