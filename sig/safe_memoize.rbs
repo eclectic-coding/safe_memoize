@@ -5,7 +5,7 @@ module SafeMemoize
   type default_memo_key = [Symbol, Array[untyped], Hash[Symbol, untyped]]
   type custom_memo_key = [Symbol, untyped]
   type memo_key = default_memo_key | custom_memo_key
-  type memo_record = { value: untyped, expires_at: Float? }
+  type memo_record = { value: untyped, expires_at: Float?, cached_at: Float }
 
   @__safe_memo_cache__: Hash[memo_key, memo_record]?
   @__safe_memo_mutex__: Mutex?
@@ -14,20 +14,33 @@ module SafeMemoize
   @__safe_memo_shared_lru_order__: Hash[Symbol, Hash[memo_key, true]]?
 
   def self.prepended: (Class base) -> void
+  def self.configure: () { (Configuration) -> void } -> void
+  def self.configuration: () -> Configuration
+  def self.reset_configuration!: () -> Configuration
+
+  class Configuration
+    attr_accessor default_ttl: Numeric?
+    attr_accessor default_max_size: Integer?
+
+    def initialize: () -> void
+  end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool) -> void
-    def memoize_all: (?except: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?) -> void
+    def memoize_all: (?except: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
     def shared_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
     def shared_memo_count: (?Symbol | String method_name) -> Integer
+    def shared_memo_age: (Symbol | String method_name, *untyped args, **untyped kwargs) -> Float?
+    def shared_memo_stale?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
 
     private
 
     def __safe_memo_shared_cache__: () -> Hash[memo_key, memo_record]
     def __safe_memo_shared_mutex__: () -> Mutex
     def __safe_memo_shared_lru_order__: () -> Hash[Symbol, Hash[memo_key, true]]
+    def __safe_memo_class_key_generators__: () -> Hash[Symbol, Proc]
     def memoized_method_visibility: (Symbol method_name) -> Symbol
   end
 
@@ -47,6 +60,10 @@ module SafeMemoize
     def warm_memo: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) { () -> untyped } -> untyped
     def dump_memo: (?Symbol | String method_name) -> Hash[memo_key, untyped]
     def load_memo: (Hash[memo_key, untyped] snapshot) -> nil
+    def memo_touch: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) -> bool
+    def memo_refresh: (Symbol | String method_name, *untyped args, **untyped kwargs) -> untyped
+    def memo_age: (Symbol | String method_name, *untyped args, **untyped kwargs) -> Float?
+    def memo_stale?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
     def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_memos: () -> void
   end
