@@ -30,9 +30,13 @@ module SafeMemoize
       cache_stats[:miss_rate]
     end
 
-    def cache_metrics_reset
+    def cache_metrics_reset(method_name = nil)
       with_memo_lock do
-        _reset_cache_metrics
+        if method_name
+          _reset_cache_metrics_for(method_name.to_sym)
+        else
+          _reset_cache_metrics
+        end
       end
     end
 

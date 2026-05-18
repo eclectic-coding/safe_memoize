@@ -104,6 +104,7 @@ module SafeMemoize
                     lru = klass.send(:__safe_memo_shared_lru_order__)[method_name] ||= {}
                     lru[cache_key] = true
                   end
+                  call_memo_hooks(:on_store, cache_key, new_record)
                 end
 
                 record_cache_miss(method_name, args, kwargs, elapsed_time)
@@ -150,6 +151,7 @@ module SafeMemoize
                   @__safe_memo_cache__ ||= {}
                   @__safe_memo_cache__[cache_key] = new_record
                   lru_touch(method_name, cache_key) if max_size
+                  call_memo_hooks(:on_store, cache_key, new_record)
                 end
                 record_cache_miss(method_name, args, kwargs, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
@@ -173,6 +175,7 @@ module SafeMemoize
             with_memo_lock do
               record_cache_miss(method_name, args, kwargs, elapsed_time)
               new_record = memo_cache_record(cache_key)
+              call_memo_hooks(:on_store, cache_key, new_record)
               call_memo_hooks(:on_miss, cache_key, new_record)
             end
 

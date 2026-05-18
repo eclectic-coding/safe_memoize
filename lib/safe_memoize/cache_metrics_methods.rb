@@ -26,5 +26,11 @@ module SafeMemoize
     def _reset_cache_metrics
       @__safe_memo_metrics__ = {}
     end
+
+    def _reset_cache_metrics_for(method_name)
+      return unless defined?(@__safe_memo_metrics__) && @__safe_memo_metrics__
+
+      @__safe_memo_metrics__.delete_if { |key, _| key[0] == method_name }
+    end
   end
 end

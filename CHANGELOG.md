@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+- Add `memo_preload` to batch-warm multiple cache entries in one call
+  - `obj.memo_preload(:find, [1], [2], [3])` calls the memoized method for each arg set and caches all results
+  - Returns an array of results in the same order as the input arg sets
+  - Computes each entry only once — subsequent calls return from cache
+- Add `on_memo_store` hook that fires whenever a value is written to the cache
+  - Fires on every cache miss (fast path and LRU path)
+  - Also fires when entries are written via `warm_memo` or `load_memo`
+  - Does not fire on cache hits or when a conditional `:if`/`:unless` prevents storing
+  - Fires on the calling instance for `shared: true` misses
+  - Completes the full lifecycle hook set: `on_store`, `on_hit`, `on_miss`, `on_expire`, `on_evict`
+- Add per-method `cache_metrics_reset(:method)` to clear stats for a single method without wiping the rest
+  - `cache_metrics_reset` (no args) still clears all metrics as before
 - Add `SafeMemoize.configure` for global default options
   - `SafeMemoize.configure { |c| c.default_ttl = 60 }` applies a TTL to all subsequently memoized methods
   - `SafeMemoize.configure { |c| c.default_max_size = 100 }` sets a global LRU size limit
