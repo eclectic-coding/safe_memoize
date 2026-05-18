@@ -6,6 +6,10 @@ module SafeMemoize
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
 
+      config = SafeMemoize.configuration
+      ttl = config.default_ttl if ttl.nil?
+      max_size = config.default_max_size if max_size.nil?
+
       # :if and :unless are reserved Ruby keywords, so they can't be referenced
       # as local variables directly. binding.local_variable_get is the only way
       # to read keyword arguments with those names inside the method body.
@@ -82,7 +86,7 @@ module SafeMemoize
                 value = super(*args, **kwargs)
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-                new_record = {value: value, expires_at: memo_expires_at(ttl)}
+                new_record = memo_record(value, expires_at: memo_expires_at(ttl))
 
                 if !condition || condition.call(value)
                   if max_size
@@ -225,6 +229,45 @@ module SafeMemoize
         now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         live = cache.reject { |_, r| r[:expires_at] && r[:expires_at] <= now }
         method_name ? live.count { |key, _| key[0] == method_name.to_sym } : live.count
+      end
+    end
+
+    def shared_memo_age(method_name, *args, **kwargs)
+      method_name = method_name.to_sym
+      cache_key = [method_name, args, kwargs]
+
+      __safe_memo_shared_mutex__.synchronize do
+        cache = @__safe_memo_shared_cache__
+        return nil unless cache
+
+        record = cache[cache_key]
+        return nil unless record
+
+        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        return nil if record[:expires_at] && record[:expires_at] <= now
+
+        cached_at = record[:cached_at]
+        return nil unless cached_at
+
+        (now - cached_at).round(6)
+      end
+    end
+
+    def shared_memo_stale?(method_name, *args, **kwargs)
+      method_name = method_name.to_sym
+      cache_key = [method_name, args, kwargs]
+
+      __safe_memo_shared_mutex__.synchronize do
+        cache = @__safe_memo_shared_cache__
+        return false unless cache
+
+        record = cache[cache_key]
+        return false unless record
+
+        expires_at = record[:expires_at]
+        return false unless expires_at
+
+        expires_at <= Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
     end
 

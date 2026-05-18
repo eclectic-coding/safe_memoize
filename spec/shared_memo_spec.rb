@@ -195,6 +195,95 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    describe ".shared_memo_age" do
+      it "returns nil when the entry has not been cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true
+        end
+
+        expect(klass.shared_memo_age(:value)).to be_nil
+      end
+
+      it "returns a non-negative float after the entry is cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true
+        end
+
+        klass.new.value
+        expect(klass.shared_memo_age(:value)).to be >= 0
+        expect(klass.shared_memo_age(:value)).to be_a(Float)
+      end
+
+      it "returns nil after the entry expires" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true, ttl: 0.01
+        end
+
+        klass.new.value
+        sleep(0.02)
+        expect(klass.shared_memo_age(:value)).to be_nil
+      end
+    end
+
+    describe ".shared_memo_stale?" do
+      it "returns false when the entry has not been cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true
+        end
+
+        expect(klass.shared_memo_stale?(:value)).to be(false)
+      end
+
+      it "returns false for a live entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true, ttl: 60
+        end
+
+        klass.new.value
+        expect(klass.shared_memo_stale?(:value)).to be(false)
+      end
+
+      it "returns false for an entry with no TTL" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true
+        end
+
+        klass.new.value
+        expect(klass.shared_memo_stale?(:value)).to be(false)
+      end
+
+      it "returns true after the TTL has elapsed" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true, ttl: 0.01
+        end
+
+        klass.new.value
+        sleep(0.02)
+        expect(klass.shared_memo_stale?(:value)).to be(true)
+      end
+    end
+
     describe "with ttl:" do
       it "expires shared entries after the ttl" do
         klass = Class.new do

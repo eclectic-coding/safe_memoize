@@ -557,6 +557,92 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "memo_touch" do
+      it "returns false when the entry has not been cached" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 60
+        end
+        expect(klass.new.memo_touch(:value)).to be(false)
+      end
+
+      it "returns false when the entry has expired" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 0.01
+        end
+        obj = klass.new
+        obj.value
+        sleep(0.02)
+        expect(obj.memo_touch(:value)).to be(false)
+      end
+
+      it "returns true for a live entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 60
+        end
+        obj = klass.new
+        obj.value
+        expect(obj.memo_touch(:value)).to be(true)
+      end
+
+      it "extends the TTL using the original TTL when none given" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 0.1
+        end
+        obj = klass.new
+        obj.value
+        sleep(0.07)
+        obj.memo_touch(:value)
+        sleep(0.07)
+        expect(obj.memoized?(:value)).to be(true)
+      end
+
+      it "extends the TTL by an explicit duration" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 0.01
+        end
+        obj = klass.new
+        obj.value
+        obj.memo_touch(:value, ttl: 60)
+        expect(obj.memo_ttl_remaining(:value)).to be > 30
+      end
+
+      it "resets memo_age after touching" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = 1
+
+          memoize :value, ttl: 60
+        end
+        obj = klass.new
+        obj.value
+        sleep(0.02)
+        age_before = obj.memo_age(:value)
+        obj.memo_touch(:value)
+        expect(obj.memo_age(:value)).to be < age_before
+      end
+    end
+
     context "cache inspection" do
       it "returns whether a zero-argument method has been memoized" do
         klass = Class.new do
