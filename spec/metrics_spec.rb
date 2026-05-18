@@ -197,6 +197,34 @@ RSpec.describe SafeMemoize do
         result = instance.expensive_computation(1)
         expect(result).to eq(2)
       end
+
+      it "clears metrics for only the named method when a method name is given" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def foo(x) = x * 2
+          def bar(x) = x * 3
+
+          memoize :foo
+          memoize :bar
+        end
+
+        instance = klass.new
+        2.times { instance.foo(1) }
+        2.times { instance.bar(1) }
+
+        instance.cache_metrics_reset(:foo)
+
+        expect(instance.cache_stats_for(:foo)[:total_hits]).to eq(0)
+        expect(instance.cache_stats_for(:foo)[:total_misses]).to eq(0)
+        expect(instance.cache_stats_for(:bar)[:total_hits]).to eq(1)
+        expect(instance.cache_stats_for(:bar)[:total_misses]).to eq(1)
+      end
+
+      it "is a no-op when the named method has no recorded metrics" do
+        instance = test_class.new
+        expect { instance.cache_metrics_reset(:expensive_computation) }.not_to raise_error
+      end
     end
 
     describe "metrics isolation between instances" do

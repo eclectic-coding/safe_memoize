@@ -165,6 +165,67 @@ RSpec.describe SafeMemoize do
     end
   end
 
+  describe "#memo_preload" do
+    it "pre-populates the cache for each argument set" do
+      call_count = 0
+      klass = Class.new do
+        prepend SafeMemoize
+
+        define_method(:find) { |id|
+          call_count += 1
+          id * 10
+        }
+        memoize :find
+      end
+
+      instance = klass.new
+      instance.memo_preload(:find, [1], [2], [3])
+
+      expect(call_count).to eq(3)
+      expect(instance.find(1)).to eq(10)
+      expect(instance.find(2)).to eq(20)
+      expect(instance.find(3)).to eq(30)
+      expect(call_count).to eq(3)
+    end
+
+    it "returns an array of results in order" do
+      instance = test_class.new
+      instance.warm_memo(:find, 1) { "a" }
+      instance.warm_memo(:find, 2) { "b" }
+      instance.warm_memo(:find, 3) { "c" }
+
+      results = instance.memo_preload(:find, [1], [2], [3])
+      expect(results).to eq(["a", "b", "c"])
+    end
+
+    it "handles single-element arg sets" do
+      instance = test_class.new
+      instance.warm_memo(:find, 5) { "five" }
+
+      results = instance.memo_preload(:find, [5])
+      expect(results).to eq(["five"])
+    end
+
+    it "handles a zero-argument method" do
+      call_count = 0
+      klass = Class.new do
+        prepend SafeMemoize
+
+        define_method(:value) {
+          call_count += 1
+          42
+        }
+        memoize :value
+      end
+
+      instance = klass.new
+      results = instance.memo_preload(:value, [])
+      expect(results).to eq([42])
+      instance.value
+      expect(call_count).to eq(1)
+    end
+  end
+
   describe "#load_memo" do
     it "restores cached entries from a dump" do
       source = test_class.new

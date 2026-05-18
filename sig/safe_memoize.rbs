@@ -56,8 +56,10 @@ module SafeMemoize
     def on_memo_evict: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def on_memo_hit: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def on_memo_miss: { (memo_key cache_key, memo_record record) -> untyped } -> void
+    def on_memo_store: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def clear_memo_hooks: (Symbol? hook_type) -> void
     def warm_memo: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) { () -> untyped } -> untyped
+    def memo_preload: (Symbol | String method_name, *Array[untyped] arg_sets) -> Array[untyped]
     def dump_memo: (?Symbol | String method_name) -> Hash[memo_key, untyped]
     def load_memo: (Hash[memo_key, untyped] snapshot) -> nil
     def memo_touch: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) -> bool
@@ -109,11 +111,11 @@ module SafeMemoize
   end
 
   module HooksMethods
-    @__safe_memo_hooks__: { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc], on_miss: Array[Proc] }?
+    @__safe_memo_hooks__: { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc], on_miss: Array[Proc], on_store: Array[Proc] }?
 
     private
 
-    def memo_hook_store: () -> { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc], on_miss: Array[Proc] }
+    def memo_hook_store: () -> { on_expire: Array[Proc], on_evict: Array[Proc], on_hit: Array[Proc], on_miss: Array[Proc], on_store: Array[Proc] }
     def register_memo_hook: (Symbol hook_type) { (memo_key cache_key, memo_record record) -> untyped } -> void
     def call_memo_hooks: (Symbol hook_type, memo_key cache_key, memo_record record) -> void
     def _clear_memo_hooks: (Symbol? hook_type) -> void
@@ -135,7 +137,7 @@ module SafeMemoize
     def cache_stats_for: (Symbol | String method_name) -> Hash[Symbol, untyped]
     def cache_hit_rate: () -> Float
     def cache_miss_rate: () -> Float
-    def cache_metrics_reset: () -> void
+    def cache_metrics_reset: (?Symbol | String method_name) -> void
 
     private
 

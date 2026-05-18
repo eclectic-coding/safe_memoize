@@ -75,6 +75,12 @@ module SafeMemoize
       register_memo_hook(:on_miss, &block)
     end
 
+    def on_memo_store(&block)
+      raise ArgumentError, "block required" unless block
+
+      register_memo_hook(:on_store, &block)
+    end
+
     def clear_memo_hooks(hook_type = nil)
       with_memo_lock do
         _clear_memo_hooks(hook_type)
@@ -90,10 +96,19 @@ module SafeMemoize
 
       with_memo_lock do
         @__safe_memo_cache__ ||= {}
-        @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: memo_expires_at(ttl))
+        record = memo_record(value, expires_at: memo_expires_at(ttl))
+        @__safe_memo_cache__[cache_key] = record
+        call_memo_hooks(:on_store, cache_key, record)
       end
 
       value
+    end
+
+    def memo_preload(method_name, *arg_sets)
+      method_name = method_name.to_sym
+      arg_sets.map do |args|
+        send(method_name, *Array(args))
+      end
     end
 
     def dump_memo(method_name = nil)
@@ -113,7 +128,9 @@ module SafeMemoize
       with_memo_lock do
         @__safe_memo_cache__ ||= {}
         snapshot.each do |cache_key, value|
-          @__safe_memo_cache__[cache_key] = memo_record(value, expires_at: nil)
+          record = memo_record(value, expires_at: nil)
+          @__safe_memo_cache__[cache_key] = record
+          call_memo_hooks(:on_store, cache_key, record)
         end
       end
 

@@ -343,6 +343,104 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    describe "#on_memo_store" do
+      it "fires on a cache miss (fast path)" do
+        instance = test_class.new
+        stored = []
+        instance.on_memo_store { |key, _| stored << key }
+
+        instance.expensive_computation(1)
+        expect(stored.size).to eq(1)
+        expect(stored[0]).to include(:expensive_computation)
+      end
+
+      it "fires on a cache miss (LRU path)" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value(x) = x * 2
+          memoize :value, max_size: 10
+        end
+
+        instance = klass.new
+        stored = []
+        instance.on_memo_store { |_, _| stored << true }
+
+        instance.value(1)
+        instance.value(1)
+        expect(stored.size).to eq(1)
+      end
+
+      it "does not fire on a cache hit" do
+        instance = test_class.new
+        stored = []
+        instance.on_memo_store { |_, _| stored << true }
+
+        instance.expensive_computation(1)
+        instance.expensive_computation(1)
+        expect(stored.size).to eq(1)
+      end
+
+      it "fires when warm_memo populates an entry" do
+        instance = test_class.new
+        stored = []
+        instance.on_memo_store { |key, _| stored << key }
+
+        instance.warm_memo(:expensive_computation, 7) { 99 }
+        expect(stored.size).to eq(1)
+        expect(stored[0]).to include(:expensive_computation)
+      end
+
+      it "fires for each entry loaded via load_memo" do
+        instance = test_class.new
+        stored = []
+        instance.on_memo_store { |_, _| stored << true }
+
+        instance.load_memo({
+          [:expensive_computation, [1], {}] => 2,
+          [:expensive_computation, [2], {}] => 4
+        })
+        expect(stored.size).to eq(2)
+      end
+
+      it "does not fire when a conditional :if prevents storing" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = nil
+          memoize :value, if: ->(r) { !r.nil? }
+        end
+
+        instance = klass.new
+        stored = []
+        instance.on_memo_store { |_, _| stored << true }
+
+        instance.value
+        expect(stored).to be_empty
+      end
+
+      it "fires for shared: true cache misses on the calling instance" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def value = rand
+          memoize :value, shared: true
+        end
+
+        instance = klass.new
+        stored = []
+        instance.on_memo_store { |_, _| stored << true }
+
+        instance.value
+        expect(stored.size).to eq(1)
+      end
+
+      it "raises ArgumentError without a block" do
+        instance = test_class.new
+        expect { instance.on_memo_store }.to raise_error(ArgumentError, /block required/)
+      end
+    end
+
     describe "#clear_memo_hooks" do
       it "clears all hooks of a specific type" do
         instance = test_class.new
