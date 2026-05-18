@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.6.2] - 2026-05-18
+
 - Achieve 100% line coverage across all lib files
   - Add SimpleCov filter to exclude `/spec` from coverage reporting
   - Add tests for `memo_ttl` in `CacheRecordMethods` covering nil, valid numeric, negative, and non-numeric inputs
