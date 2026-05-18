@@ -288,11 +288,11 @@ RSpec.describe SafeMemoize do
           user_id
         end
 
-        instance.compute_value(7, {opt: true})
+        instance.compute_value(7, "opts")
 
         values = instance.memo_values(:compute_value)
         expect(values.length).to eq(1)
-        expect(values.first).to include(custom_key: 7, value: "result_7_{opt: true}")
+        expect(values.first).to include(custom_key: 7, value: "result_7_opts")
       end
     end
 
