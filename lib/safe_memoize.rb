@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "safe_memoize/version"
+require_relative "safe_memoize/configuration"
 require_relative "safe_memoize/class_methods"
 require_relative "safe_memoize/public_methods"
 require_relative "safe_memoize/cache_store_methods"
@@ -21,5 +22,17 @@ module SafeMemoize
 
   def self.prepended(base)
     base.extend(ClassMethods)
+  end
+
+  def self.configure
+    yield configuration
+  end
+
+  def self.configuration
+    @configuration ||= Configuration.new
+  end
+
+  def self.reset_configuration!
+    @configuration = Configuration.new
   end
 end
