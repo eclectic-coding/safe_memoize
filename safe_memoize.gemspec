@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
 
   spec.version = SafeMemoize::VERSION
   spec.authors = ["Chuck Smith"]
-  spec.email = ["eclectic-coding@users.noreply.github.com"]
+  spec.email = ["chuck@eclecticcoding.com"]
 
   spec.summary = "Thread-safe memoization that correctly handles nil and false values"
   spec.description = "SafeMemoize is a production-ready, zero-dependency memoization library for Ruby. " \
