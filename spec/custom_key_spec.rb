@@ -296,6 +296,112 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    describe "class-level key: option on memoize" do
+      it "uses the key generator to determine cache equivalence" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(user_id, _opts)
+            "result_#{user_id}_#{rand}"
+          end
+
+          memoize :compute, key: ->(user_id, _opts) { user_id }
+        end
+
+        instance = klass.new
+        r1 = instance.compute(1, {a: 1})
+        r2 = instance.compute(1, {a: 2})
+
+        expect(r1).to eq(r2)
+      end
+
+      it "treats different key values as separate cache entries" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(user_id, _opts)
+            "result_#{user_id}"
+          end
+
+          memoize :compute, key: ->(user_id, _opts) { user_id }
+        end
+
+        instance = klass.new
+        expect(instance.compute(1, {})).not_to eq(instance.compute(2, {}))
+      end
+
+      it "surfaces as custom_key: in memo_keys" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(user_id, _opts)
+            "result_#{user_id}"
+          end
+
+          memoize :compute, key: ->(user_id, _opts) { user_id }
+        end
+
+        instance = klass.new
+        instance.compute(5, {})
+
+        keys = instance.memo_keys(:compute)
+        expect(keys.first).to include(custom_key: 5)
+        expect(keys.first).not_to have_key(:args)
+      end
+
+      it "instance-level memoize_with_custom_key takes priority over key:" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(a, b)
+            "#{a}_#{b}_#{rand}"
+          end
+
+          memoize :compute, key: ->(a, _b) { a }
+        end
+
+        instance = klass.new
+        instance.memoize_with_custom_key(:compute) { |a, b| "#{a}_#{b}" }
+
+        r1 = instance.compute(1, "x")
+        r2 = instance.compute(1, "y")
+
+        expect(r1).not_to eq(r2)
+      end
+
+      it "raises ArgumentError when key: is not callable" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def compute(x) = x
+
+            memoize :compute, key: "not_callable"
+          end
+        end.to raise_error(ArgumentError, ":key must be callable")
+      end
+
+      it "works with shared: true" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def compute(user_id, _opts)
+            "result_#{user_id}_#{rand}"
+          end
+
+          memoize :compute, shared: true, key: ->(user_id, _opts) { user_id }
+        end
+
+        a = klass.new
+        b = klass.new
+
+        r1 = a.compute(1, {x: 1})
+        r2 = b.compute(1, {x: 2})
+
+        expect(r1).to eq(r2)
+      end
+    end
+
     describe "custom keys with default arguments" do
       it "supports methods with default arguments" do
         test_class_with_defaults = Class.new do

@@ -2,7 +2,7 @@
 
 module SafeMemoize
   module ClassMethods
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil)
       method_name = method_name.to_sym
       visibility = memoized_method_visibility(method_name)
 
@@ -38,6 +38,9 @@ module SafeMemoize
       end
       raise ArgumentError, ":if must be callable" if cond_if && !cond_if.respond_to?(:call)
       raise ArgumentError, ":unless must be callable" if cond_unless && !cond_unless.respond_to?(:call)
+      raise ArgumentError, ":key must be callable" if key && !key.respond_to?(:call)
+
+      __safe_memo_class_key_generators__[method_name] = key if key
 
       # Normalize to a single "should cache?" predicate
       condition = if cond_if
@@ -251,6 +254,10 @@ module SafeMemoize
 
     def __safe_memo_shared_lru_order__
       @__safe_memo_shared_lru_order__ ||= {}
+    end
+
+    def __safe_memo_class_key_generators__
+      @__safe_memo_class_key_generators__ ||= {}
     end
 
     def memoized_method_visibility(method_name)

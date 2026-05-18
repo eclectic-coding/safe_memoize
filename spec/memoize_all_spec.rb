@@ -213,6 +213,48 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "with shared: true" do
+      let(:shared_class) do
+        Class.new do
+          prepend SafeMemoize
+
+          def value
+            rand
+          end
+
+          def compute(x)
+            rand + x
+          end
+
+          memoize_all shared: true
+        end
+      end
+
+      it "shares the cache across instances" do
+        a = shared_class.new
+        b = shared_class.new
+
+        r = a.value
+        expect(b.value).to eq(r)
+      end
+
+      it "caches per unique arguments across instances" do
+        a = shared_class.new
+        b = shared_class.new
+
+        r = a.compute(1)
+        expect(b.compute(1)).to eq(r)
+        expect(b.compute(2)).not_to eq(r)
+      end
+
+      it "can be invalidated class-wide" do
+        a = shared_class.new
+        first = a.value
+        shared_class.reset_all_shared_memos
+        expect(a.value).not_to eq(first)
+      end
+    end
+
     context "isolation" do
       it "does not affect other classes" do
         klass = Class.new do
