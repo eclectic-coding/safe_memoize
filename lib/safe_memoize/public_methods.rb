@@ -226,5 +226,48 @@ module SafeMemoize
         lru_clear_all
       end
     end
+
+    def memo_inspect(method_name, *args, **kwargs)
+      method_name = method_name.to_sym
+      cache_key = compute_cache_key(method_name, args, kwargs)
+
+      with_memo_lock do
+        record = memo_cache_record(cache_key)
+        return nil unless record
+
+        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+        ttl_remaining = if record[:expires_at]
+          remaining = record[:expires_at] - now
+          (remaining > 0) ? remaining.round(6) : 0
+        end
+
+        age = (now - record[:cached_at]).round(6) if record[:cached_at]
+
+        metrics_key = safe_memo_cache_key(method_name, args, kwargs)
+        entry_metrics = memo_metrics_store[metrics_key] || {hits: 0, misses: 0}
+
+        custom_key = (cache_key.length == 2) ? cache_key[1] : nil
+
+        lru_position = begin
+          method_lru = lru_order_store[method_name]
+          if method_lru&.key?(cache_key)
+            keys = method_lru.keys
+            keys.length - keys.index(cache_key)
+          end
+        end
+
+        {
+          cached: true,
+          value: memo_record_value(record),
+          hits: entry_metrics[:hits],
+          misses: entry_metrics[:misses],
+          ttl_remaining: ttl_remaining,
+          age: age,
+          custom_key: custom_key,
+          lru_position: lru_position
+        }
+      end
+    end
   end
 end
