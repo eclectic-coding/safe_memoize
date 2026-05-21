@@ -4,21 +4,6 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 ---
 
-## v0.8.0 — Robustness & Developer Experience
-
-*Goal: harden the existing API surface, improve failure modes, and make debugging easier.*
-
-| Feature | Description | Status |
-|---|---|---|
-| ~~Descriptive argument errors~~ | Raise ArgumentError at definition time when memoize is called on a method that does not exist on the class | Shipped |
-| ~~Key serialization safety~~ | Deep-freeze argument keys stored in the cache to prevent subtle mutation bugs when callers modify objects they passed in | Shipped |
-| ~~`memo_inspect`~~ | Single-entry deep-inspection helper returning all metadata (value, hits, misses, TTL remaining, age, custom key, LRU position) for one cached call in one shot | Shipped |
-| ~~Deprecation infrastructure~~ | Add an internal `SafeMemoize.deprecate` helper so future breaking changes can be signalled clearly before they land | Shipped |
-| ~~`memoize_all only:`~~ | Symmetric counterpart to `except:` for explicitly listing the methods to memoize rather than excluding specific ones | Shipped |
-| ~~Hook error isolation~~ | Hook exceptions should not propagate to the caller; log or surface them through a configurable error handler in `SafeMemoize.configure` | Shipped |
-
----
-
 ## v0.9.0 — Observability & Ecosystem Integration
 
 *Goal: make SafeMemoize a first-class citizen in Rails/ActiveSupport stacks and in observability pipelines.*
