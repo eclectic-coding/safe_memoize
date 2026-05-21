@@ -562,6 +562,10 @@ To preview the changelog/version update without changing anything, use:
 bin/release 0.1.1 --dry-run
 ```
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the planned path from v0.7.0 to v1.0.0 and beyond, including upcoming features, API stability goals, and the versioning policy.
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/eclectic-coding/safe_memoize.
