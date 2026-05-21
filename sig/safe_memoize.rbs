@@ -17,10 +17,12 @@ module SafeMemoize
   def self.configure: () { (Configuration) -> void } -> void
   def self.configuration: () -> Configuration
   def self.reset_configuration!: () -> Configuration
+  def self.deprecate: (String subject, message: String, horizon: String) -> void
 
   class Configuration
     attr_accessor default_ttl: Numeric?
     attr_accessor default_max_size: Integer?
+    attr_accessor on_deprecation: (^(String message) -> void)?
 
     def initialize: () -> void
   end
