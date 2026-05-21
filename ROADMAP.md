@@ -1,29 +1,6 @@
 # SafeMemoize Roadmap
 
-This document tracks the planned evolution of SafeMemoize from its current state (v0.7.0) through v1.0.0 and beyond. Items are grouped by release milestone; ordering within a milestone reflects priority, not a strict implementation sequence.
-
----
-
-## Current state — v0.7.0
-
-The gem ships with a comprehensive feature set:
-
-- Thread-safe memoization (nil/false-safe, per-argument caching)
-- TTL expiration with sliding-window (`ttl_refresh:`) support
-- LRU cache size capping (`max_size:`)
-- Conditional caching (`if:` / `unless:`)
-- Full lifecycle hooks: `on_memo_hit`, `on_memo_miss`, `on_memo_store`, `on_memo_expire`, `on_memo_evict`
-- Per-instance cache metrics (`cache_stats`, hit/miss rates, computation time)
-- Cache warm-up, export, and restore (`warm_memo`, `dump_memo`, `load_memo`)
-- Bulk preloading (`memo_preload`)
-- Class-level shared cache (`shared: true`) with age/stale inspection
-- Bulk memoization (`memoize_all`) including protected/private methods
-- Custom cache keys at class level (`key:`) and instance level (`memoize_with_custom_key`)
-- Rich introspection (`memoized?`, `memo_count`, `memo_keys`, `memo_values`, `memo_ttl_remaining`, `memo_age`, `memo_stale?`)
-- `memo_touch` (extend TTL without recomputing) and `memo_refresh` (force recompute)
-- Global configuration via `SafeMemoize.configure`
-- Complete RBS type signatures
-- 100% line coverage
+This document tracks the planned evolution of SafeMemoize through v1.0.0 and beyond. Items are grouped by release milestone; ordering within a milestone reflects priority, not a strict implementation sequence.
 
 ---
 
