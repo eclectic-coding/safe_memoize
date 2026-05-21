@@ -15,7 +15,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 | ~~`memo_inspect`~~ | Single-entry deep-inspection helper returning all metadata (value, hits, misses, TTL remaining, age, custom key, LRU position) for one cached call in one shot | Shipped |
 | ~~Deprecation infrastructure~~ | Add an internal `SafeMemoize.deprecate` helper so future breaking changes can be signalled clearly before they land | Shipped |
 | ~~`memoize_all only:`~~ | Symmetric counterpart to `except:` for explicitly listing the methods to memoize rather than excluding specific ones | Shipped |
-| Hook error isolation | Hook exceptions should not propagate to the caller; log or surface them through a configurable error handler in `SafeMemoize.configure` | Planned |
+| ~~Hook error isolation~~ | Hook exceptions should not propagate to the caller; log or surface them through a configurable error handler in `SafeMemoize.configure` | Shipped |
 
 ---
 
