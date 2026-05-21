@@ -1382,6 +1382,7 @@ RSpec.describe SafeMemoize do
         expect do
           Class.new do
             prepend SafeMemoize
+
             memoize :nonexistent
           end
         end.to raise_error(ArgumentError, /cannot memoize :nonexistent.*no instance method/)
@@ -1391,6 +1392,7 @@ RSpec.describe SafeMemoize do
         expect do
           Class.new do
             prepend SafeMemoize
+
             memoize :missing_method
           end
         end.to raise_error(ArgumentError, /missing_method/)
@@ -1400,6 +1402,7 @@ RSpec.describe SafeMemoize do
         expect do
           Class.new do
             prepend SafeMemoize
+
             def value = 1
             memoize :value
           end
@@ -1410,7 +1413,9 @@ RSpec.describe SafeMemoize do
         expect do
           Class.new do
             prepend SafeMemoize
+
             private
+
             def secret = "shh"
             memoize :secret
           end
@@ -1421,7 +1426,9 @@ RSpec.describe SafeMemoize do
         expect do
           Class.new do
             prepend SafeMemoize
+
             protected
+
             def guarded = 42
             memoize :guarded
           end
