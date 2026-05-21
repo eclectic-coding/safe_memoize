@@ -68,6 +68,7 @@ module SafeMemoize
     def memo_stale?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
     def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_memos: () -> void
+    def memo_inspect: (Symbol | String method_name, *untyped args, **untyped kwargs) -> { cached: bool, value: untyped, hits: Integer, misses: Integer, ttl_remaining: Float?, age: Float?, custom_key: untyped, lru_position: Integer? }?
   end
 
   module CacheStoreMethods
