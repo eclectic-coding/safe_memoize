@@ -1,5 +1,11 @@
 # SafeMemoize
 
+[![CI](https://github.com/eclectic-coding/safe_memoize/actions/workflows/ci.yml/badge.svg)](https://github.com/eclectic-coding/safe_memoize/actions/workflows/ci.yml)
+[![Gem Version](https://img.shields.io/gem/v/safe_memoize)](https://rubygems.org/gems/safe_memoize)
+[![Total Downloads](https://img.shields.io/gem/dt/safe_memoize)](https://rubygems.org/gems/safe_memoize)
+[![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.3-CC342D)](https://www.ruby-lang.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/licenses/MIT)
+
 Thread-safe memoization for Ruby that correctly handles `nil` and `false` values.
 
 SafeMemoize is a production-ready, zero-dependency memoization library for Ruby. It wraps methods with a `prepend`-based cache that handles everything the standard `||=` idiom gets wrong: `nil` and `false` return values are cached correctly, per-argument result maps eliminate redundant computation for parameterized methods, and a per-instance `Mutex` with double-check locking makes the whole thing safe under concurrent load.
