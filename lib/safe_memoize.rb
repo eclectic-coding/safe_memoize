@@ -35,4 +35,10 @@ module SafeMemoize
   def self.reset_configuration!
     @configuration = Configuration.new
   end
+
+  def self.deprecate(subject, message:, horizon:)
+    text = "[SafeMemoize] #{subject} is deprecated and will be removed in #{horizon}. #{message}"
+    handler = configuration.on_deprecation
+    handler ? handler.call(text) : warn(text)
+  end
 end
