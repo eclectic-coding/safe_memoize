@@ -52,3 +52,10 @@ jobs:
       - name: Run test suite
         run: bundle exec rspec
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: matrix.ruby == '3.4'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/.resultset.json
+
