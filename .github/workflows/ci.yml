@@ -11,6 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Run StandardRB
+        run: bundle exec standardrb
+
   test:
     name: Ruby ${{ matrix.ruby }}
     runs-on: ubuntu-latest
@@ -32,6 +49,6 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
 
-      - name: Run test and lint suite
-        run: bundle exec rake
+      - name: Run test suite
+        run: bundle exec rspec
 
