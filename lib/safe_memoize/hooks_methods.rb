@@ -19,7 +19,16 @@ module SafeMemoize
 
     def call_memo_hooks(hook_type, cache_key, record)
       hooks = memo_hook_store[hook_type] || []
-      hooks.each { |hook| hook.call(cache_key, record) }
+      hooks.each do |hook|
+        hook.call(cache_key, record)
+      rescue => error
+        handler = SafeMemoize.configuration.on_hook_error
+        if handler
+          handler.call(error, hook_type, cache_key)
+        else
+          warn "[SafeMemoize] Hook error in #{hook_type}: #{error.message}"
+        end
+      end
     end
 
     def _clear_memo_hooks(hook_type = nil)

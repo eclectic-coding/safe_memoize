@@ -516,5 +516,106 @@ RSpec.describe SafeMemoize do
         expect(calls2).to be_empty
       end
     end
+
+    describe "hook error isolation" do
+      around do |example|
+        example.run
+      ensure
+        SafeMemoize.reset_configuration!
+      end
+
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def value
+            42
+          end
+
+          memoize :value
+        end
+      end
+
+      it "does not propagate hook exceptions to the caller" do
+        obj = klass.new
+        obj.on_memo_hit { raise "hook exploded" }
+        obj.value
+
+        expect { obj.value }.not_to raise_error
+      end
+
+      it "emits a warning to stderr by default when a hook raises" do
+        obj = klass.new
+        obj.on_memo_miss { raise "boom" }
+
+        expect { obj.value }.to output(/\[SafeMemoize\] Hook error in on_miss/).to_stderr
+      end
+
+      it "includes the error message in the default warning" do
+        obj = klass.new
+        obj.on_memo_miss { raise "something went wrong" }
+
+        expect { obj.value }.to output(/something went wrong/).to_stderr
+      end
+
+      it "calls on_hook_error handler instead of warning when configured" do
+        received = []
+        SafeMemoize.configure do |c|
+          c.on_hook_error = ->(error, hook_type, _key) { received << [error.message, hook_type] }
+        end
+
+        obj = klass.new
+        obj.on_memo_miss { raise "handler called" }
+
+        expect { obj.value }.not_to output.to_stderr
+        expect(received).to eq([["handler called", :on_miss]])
+      end
+
+      it "passes the hook type and cache key to the error handler" do
+        payloads = []
+        SafeMemoize.configure do |c|
+          c.on_hook_error = ->(error, hook_type, cache_key) { payloads << {hook_type: hook_type, cache_key: cache_key} }
+        end
+
+        obj = klass.new
+        obj.on_memo_hit { raise "oops" }
+        obj.value
+        obj.value
+
+        expect(payloads.first[:hook_type]).to eq(:on_hit)
+        expect(payloads.first[:cache_key]).not_to be_nil
+      end
+
+      it "isolates errors per hook — remaining hooks in the same event still fire" do
+        obj = klass.new
+        SafeMemoize.configure { |c| c.on_hook_error = ->(*) {} }
+
+        fired = []
+        obj.on_memo_miss { raise "first hook fails" }
+        obj.on_memo_miss { fired << :second }
+
+        obj.value
+        expect(fired).to eq([:second])
+      end
+
+      it "can be configured to raise on hook errors" do
+        SafeMemoize.configure { |c| c.on_hook_error = ->(error, *) { raise error } }
+
+        obj = klass.new
+        obj.on_memo_miss { raise "strict mode" }
+
+        expect { obj.value }.to raise_error("strict mode")
+      end
+
+      it "restores default warn behaviour after reset_configuration!" do
+        SafeMemoize.configure { |c| c.on_hook_error = ->(*) { raise "should not be called" } }
+        SafeMemoize.reset_configuration!
+
+        obj = klass.new
+        obj.on_memo_miss { raise "warn me" }
+
+        expect { obj.value }.to output(/\[SafeMemoize\]/).to_stderr
+      end
+    end
   end
 end
