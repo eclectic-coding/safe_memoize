@@ -4,6 +4,11 @@ module SafeMemoize
   module ClassMethods
     def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil)
       method_name = method_name.to_sym
+
+      unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
+        raise ArgumentError, "cannot memoize :#{method_name} — no instance method with that name is defined on #{self}"
+      end
+
       visibility = memoized_method_visibility(method_name)
 
       config = SafeMemoize.configuration
