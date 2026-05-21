@@ -1,11 +1,10 @@
 # SafeMemoize
 
 [![CI](https://github.com/eclectic-coding/safe_memoize/actions/workflows/ci.yml/badge.svg)](https://github.com/eclectic-coding/safe_memoize/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/eclectic-coding/safe_memoize/graph/badge.svg)](https://codecov.io/gh/eclectic-coding/safe_memoize)
 [![Gem Version](https://img.shields.io/gem/v/safe_memoize)](https://rubygems.org/gems/safe_memoize)
 [![Total Downloads](https://img.shields.io/gem/dt/safe_memoize)](https://rubygems.org/gems/safe_memoize)
 [![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.3-CC342D)](https://www.ruby-lang.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/licenses/MIT)
+[![codecov](https://codecov.io/gh/eclectic-coding/safe_memoize/graph/badge.svg)](https://codecov.io/gh/eclectic-coding/safe_memoize)
 
 Thread-safe memoization for Ruby that correctly handles `nil` and `false` values.
 
