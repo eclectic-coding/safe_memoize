@@ -279,8 +279,11 @@ module SafeMemoize
       end
     end
 
-    def memoize_all(except: [], include_protected: false, include_private: false, **options)
+    def memoize_all(except: [], only: [], include_protected: false, include_private: false, **options)
+      raise ArgumentError, "cannot specify both :only and :except" if only.any? && except.any?
+
       excluded = Array(except).map(&:to_sym)
+      included = Array(only).map(&:to_sym)
 
       methods = public_instance_methods(false)
       methods |= protected_instance_methods(false) if include_protected
@@ -288,6 +291,7 @@ module SafeMemoize
 
       methods.each do |method_name|
         next if excluded.include?(method_name)
+        next if included.any? && !included.include?(method_name)
 
         memoize(method_name, **options)
       end

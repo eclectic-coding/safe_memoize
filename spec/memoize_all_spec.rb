@@ -105,6 +105,88 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "with only:" do
+      let(:selective_class) do
+        Class.new do
+          prepend SafeMemoize
+
+          def foo
+            rand
+          end
+
+          def bar
+            rand
+          end
+
+          def baz
+            rand
+          end
+
+          memoize_all only: [:foo, :bar]
+        end
+      end
+
+      it "memoizes methods in the inclusion list" do
+        instance = selective_class.new
+        expect(instance.foo).to eq(instance.foo)
+        expect(instance.bar).to eq(instance.bar)
+      end
+
+      it "does not memoize methods not in the inclusion list" do
+        instance = selective_class.new
+        results = Array.new(3) { instance.baz }
+        expect(results.uniq.size).to be > 1
+      end
+
+      it "accepts string method names in only:" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def foo
+            rand
+          end
+
+          def bar
+            rand
+          end
+
+          memoize_all only: ["foo"]
+        end
+
+        instance = klass.new
+        expect(instance.foo).to eq(instance.foo)
+        results = Array.new(3) { instance.bar }
+        expect(results.uniq.size).to be > 1
+      end
+
+      it "silently skips names in only: that are not defined on the class" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def foo
+            rand
+          end
+
+          memoize_all only: [:foo, :nonexistent]
+        end
+
+        instance = klass.new
+        expect(instance.foo).to eq(instance.foo)
+      end
+
+      it "raises ArgumentError when both only: and except: are given" do
+        expect {
+          Class.new do
+            prepend SafeMemoize
+
+            def foo = rand
+
+            memoize_all only: [:foo], except: [:foo]
+          end
+        }.to raise_error(ArgumentError, /only.*except|except.*only/)
+      end
+    end
+
     context "with shared options" do
       it "applies ttl: to all methods" do
         klass = Class.new do
