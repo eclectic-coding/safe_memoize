@@ -23,7 +23,7 @@ The gem ships with a comprehensive feature set:
 - `memo_touch` (extend TTL without recomputing) and `memo_refresh` (force recompute)
 - Global configuration via `SafeMemoize.configure`
 - Complete RBS type signatures
-- 100 % line coverage
+- 100% line coverage
 
 ---
 
@@ -31,12 +31,14 @@ The gem ships with a comprehensive feature set:
 
 *Goal: harden the existing API surface, improve failure modes, and make debugging easier.*
 
-- [ ] **Descriptive argument errors** — raise `ArgumentError` with an actionable message when `memoize` is called on a method name that does not exist on the class at definition time
-- [ ] **Key serialization safety** — deep-freeze argument keys stored in the cache to prevent subtle mutation bugs when callers modify objects they passed in
-- [ ] **`memo_inspect`** — single-entry deep-inspection helper returning all metadata (value, hits, misses, TTL remaining, age, custom key, LRU position) for one cached call in one shot
-- [ ] **Deprecation infrastructure** — add an internal `SafeMemoize.deprecate` helper so future breaking changes can be signalled clearly before they land
-- [ ] **`memoize_all` option: `only:`** — symmetric counterpart to `except:` for explicitly listing the methods to memoize rather than excluding specific ones
-- [ ] **Improved hook error isolation** — hook exceptions should not propagate to the caller; log or surface them through a configurable error handler (`SafeMemoize.configure { |c| c.on_hook_error = ... }`)
+| Feature | Description | Status |
+|---|---|---|
+| ~~Descriptive argument errors~~ | Raise ArgumentError at definition time when memoize is called on a method that does not exist on the class | Shipped |
+| Key serialization safety | Deep-freeze argument keys stored in the cache to prevent subtle mutation bugs when callers modify objects they passed in | Planned |
+| `memo_inspect` | Single-entry deep-inspection helper returning all metadata (value, hits, misses, TTL remaining, age, custom key, LRU position) for one cached call in one shot | Planned |
+| Deprecation infrastructure | Add an internal `SafeMemoize.deprecate` helper so future breaking changes can be signalled clearly before they land | Planned |
+| `memoize_all only:` | Symmetric counterpart to `except:` for explicitly listing the methods to memoize rather than excluding specific ones | Planned |
+| Hook error isolation | Hook exceptions should not propagate to the caller; log or surface them through a configurable error handler in `SafeMemoize.configure` | Planned |
 
 ---
 
@@ -44,12 +46,14 @@ The gem ships with a comprehensive feature set:
 
 *Goal: make SafeMemoize a first-class citizen in Rails/ActiveSupport stacks and in observability pipelines.*
 
-- [ ] **ActiveSupport::Notifications integration** — emit `cache.hit`, `cache.miss`, `cache.evict`, and `cache.expire` events when ActiveSupport is available (opt-in via configuration)
-- [ ] **StatsD adapter** — thin optional module (`SafeMemoize::Adapters::StatsD`) that routes lifecycle hooks to a StatsD client with sensible metric names and tags
-- [ ] **OpenTelemetry spans** — optional adapter (`SafeMemoize::Adapters::OpenTelemetry`) wrapping computation time in a trace span for distributed tracing pipelines
-- [ ] **Rails request-scope helper** — guide + optional mixin for resetting instance memos at the end of each request (controller concern, middleware, or Active Model pattern)
-- [ ] **Formal benchmark suite** — `benchmarks/` directory with comparisons against `memery`, `memo_wise`, and raw `||=`, covering single-threaded throughput and contention under concurrent load
-- [ ] **Concurrency stress tests** — dedicated spec suite hammering shared-cache paths and LRU eviction under high thread counts to surface race conditions
+| Feature | Description | Status |
+|---|---|---|
+| ActiveSupport::Notifications integration | Emit `cache.hit`, `cache.miss`, `cache.evict`, and `cache.expire` events when ActiveSupport is available (opt-in via configuration) | Planned |
+| StatsD adapter | Thin optional module (`SafeMemoize::Adapters::StatsD`) that routes lifecycle hooks to a StatsD client with sensible metric names and tags | Planned |
+| OpenTelemetry spans | Optional adapter (`SafeMemoize::Adapters::OpenTelemetry`) wrapping computation time in a trace span for distributed tracing pipelines | Planned |
+| Rails request-scope helper | Guide + optional mixin for resetting instance memos at the end of each request (controller concern, middleware, or Active Model pattern) | Planned |
+| Formal benchmark suite | `benchmarks/` directory with comparisons against `memery`, `memo_wise`, and raw `||=`, covering single-threaded throughput and contention under concurrent load | Planned |
+| Concurrency stress tests | Dedicated spec suite hammering shared-cache paths and LRU eviction under high thread counts to surface race conditions | Planned |
 
 ---
 
@@ -57,13 +61,15 @@ The gem ships with a comprehensive feature set:
 
 *Goal: declare a stable, semver-governed public API that downstream code can depend on with confidence.*
 
-- [ ] **Semantic versioning guarantee** — document which constants, methods, and option keys are public API; breaking changes require a major bump henceforth
-- [ ] **Complete RBS + Sorbet signatures** — cover all public methods including overloads for optional keyword arguments; publish `.rbi` stubs as a companion package if demand warrants
-- [ ] **Full API reference** — generated documentation hosted on RubyDoc or a dedicated docs site; all public methods documented with parameter types, return values, and usage examples
-- [ ] **Ractor compatibility audit** — investigate and either support Ractor-compatible operation (Mutex replacement, shared-cache storage) or document the limitation clearly
-- [ ] **Ruby version policy** — formalise the supported Ruby version window and cadence for dropping EOL versions
-- [ ] **Deprecation sweep** — resolve or formally deprecate any unstable internal APIs before the stable release
-- [ ] **Upgrade guide** — document all breaking changes from 0.x and provide a migration path for users of deprecated behaviour
+| Feature | Description | Status |
+|---|---|---|
+| Semantic versioning guarantee | Document which constants, methods, and option keys are public API; breaking changes require a major bump henceforth | Planned |
+| Complete RBS + Sorbet signatures | Cover all public methods including overloads for optional keyword arguments; publish `.rbi` stubs as a companion package if demand warrants | Planned |
+| Full API reference | Generated documentation hosted on RubyDoc or a dedicated docs site; all public methods documented with parameter types, return values, and usage examples | Planned |
+| Ractor compatibility audit | Investigate and either support Ractor-compatible operation (Mutex replacement, shared-cache storage) or document the limitation clearly | Planned |
+| Ruby version policy | Formalise the supported Ruby version window and cadence for dropping EOL versions | Planned |
+| Deprecation sweep | Resolve or formally deprecate any unstable internal APIs before the stable release | Planned |
+| Upgrade guide | Document all breaking changes from 0.x and provide a migration path for users of deprecated behaviour | Planned |
 
 ---
 
@@ -71,11 +77,13 @@ The gem ships with a comprehensive feature set:
 
 *Goal: allow the in-process hash cache to be swapped for an external store, enabling cross-process and distributed memoization.*
 
-- [ ] **Cache store adapter interface** — define a minimal `#read`, `#write`, `#delete`, `#clear`, and `#keys` contract that external backends must implement
-- [ ] **`store:` option on `memoize`** — accept any store adapter object; defaults to the existing in-process hash store
-- [ ] **Redis adapter** — reference implementation (`SafeMemoize::Stores::Redis`) with TTL, LRU-like expiry, and serialization handled transparently
-- [ ] **Rails.cache adapter** — thin wrapper around `ActiveSupport::Cache::Store` for projects already using a configured Rails cache
-- [ ] **`SafeMemoize.configure { |c| c.default_store = ... }`** — global default store so every memoized method uses it without per-call configuration
+| Feature | Description | Status |
+|---|---|---|
+| Cache store adapter interface | Define a minimal read/write/delete/clear/keys contract that external backends must implement | Planned |
+| `store:` option on `memoize` | Accept any store adapter object; defaults to the existing in-process hash store | Planned |
+| Redis adapter | Reference implementation (`SafeMemoize::Stores::Redis`) with TTL, LRU-like expiry, and serialization handled transparently | Planned |
+| Rails.cache adapter | Thin wrapper around `ActiveSupport::Cache::Store` for projects already using a configured Rails cache | Planned |
+| Global default store | Set via `SafeMemoize.configure` — applies a default store to every memoized method without per-call configuration | Planned |
 
 ---
 
@@ -83,9 +91,11 @@ The gem ships with a comprehensive feature set:
 
 *Goal: first-class support for Fiber-based concurrency frameworks (Async, Falcon, Rails async controllers).*
 
-- [ ] **Fiber-local memoization mode** — `memoize :method, fiber_local: true` stores results in `Fiber[:safe_memoize_cache]` rather than instance variables, giving each fiber its own isolated cache automatically reset when the fiber terminates
-- [ ] **Ractor-compatible shared cache** — revisit `shared: true` using `Ractor::TVar` or shareable frozen objects so class-level caches work across Ractors
-- [ ] **concurrent-ruby integration** — optional adapter using `Concurrent::Map` and `Concurrent::ReentrantReadWriteLock` as a drop-in replacement for `Mutex` where higher read-concurrency is desirable
+| Feature | Description | Status |
+|---|---|---|
+| Fiber-local memoization mode | `memoize :method, fiber_local: true` stores results in `Fiber[:safe_memoize_cache]` rather than instance variables, giving each fiber its own isolated cache automatically reset when the fiber terminates | Planned |
+| Ractor-compatible shared cache | Revisit `shared: true` using `Ractor::TVar` or shareable frozen objects so class-level caches work across Ractors | Planned |
+| concurrent-ruby integration | Optional adapter using `Concurrent::Map` and `Concurrent::ReentrantReadWriteLock` as a drop-in replacement for `Mutex` where higher read-concurrency is desirable | Planned |
 
 ---
 
@@ -93,11 +103,13 @@ The gem ships with a comprehensive feature set:
 
 *Goal: incorporate real-world usage feedback, clean up accumulated API surface, and open a path for advanced extension.*
 
-- [ ] **Plugin / extension architecture** — a formal `SafeMemoize::Extension` API so third-party gems can add new options, hooks, or store adapters without monkey-patching
-- [ ] **DSL refinements** — evaluate alternative syntax proposals (`memoize_method`, block form, annotation approach) based on community feedback; introduce the preferred form with a migration path from the current API
-- [ ] **Cross-instance cache sharing** — beyond the class-level `shared: true`, support explicitly named shared caches that span unrelated classes
-- [ ] **Cache namespacing** — allow a namespace prefix on all keys for multi-tenant or versioned deployments (especially useful with external stores)
-- [ ] **Automatic cache busting** — optional integration with ActiveRecord's `updated_at` timestamp so object mutations automatically invalidate their own cached entries
+| Feature | Description | Status |
+|---|---|---|
+| Plugin / extension architecture | A formal `SafeMemoize::Extension` API so third-party gems can add new options, hooks, or store adapters without monkey-patching | Planned |
+| DSL refinements | Evaluate alternative syntax proposals (`memoize_method`, block form, annotation approach) based on community feedback; introduce the preferred form with a migration path from the current API | Planned |
+| Cross-instance cache sharing | Beyond the class-level `shared: true`, support explicitly named shared caches that span unrelated classes | Planned |
+| Cache namespacing | Allow a namespace prefix on all keys for multi-tenant or versioned deployments (especially useful with external stores) | Planned |
+| Automatic cache busting | Optional integration with ActiveRecord's `updated_at` timestamp so object mutations automatically invalidate their own cached entries | Planned |
 
 ---
 

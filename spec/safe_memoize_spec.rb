@@ -1376,5 +1376,64 @@ RSpec.describe SafeMemoize do
         expect(obj.call_count).to eq(2)
       end
     end
+
+    context "undefined method guard" do
+      it "raises ArgumentError with a descriptive message when the method does not exist" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            memoize :nonexistent
+          end
+        end.to raise_error(ArgumentError, /cannot memoize :nonexistent.*no instance method/)
+      end
+
+      it "includes the class name in the error message" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            memoize :missing_method
+          end
+        end.to raise_error(ArgumentError, /missing_method/)
+      end
+
+      it "does not raise for a public method" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def value = 1
+            memoize :value
+          end
+        end.not_to raise_error
+      end
+
+      it "does not raise for a private method" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            private
+
+            def secret = "shh"
+            memoize :secret
+          end
+        end.not_to raise_error
+      end
+
+      it "does not raise for a protected method" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            protected
+
+            def guarded = 42
+            memoize :guarded
+          end
+        end.not_to raise_error
+      end
+    end
   end
 end
