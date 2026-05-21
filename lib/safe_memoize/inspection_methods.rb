@@ -69,7 +69,20 @@ module SafeMemoize
     end
 
     def safe_memo_cache_key(method_name, args, kwargs)
-      [method_name.to_sym, args, kwargs]
+      [method_name.to_sym, deep_freeze_copy(args), deep_freeze_copy(kwargs)]
+    end
+
+    def deep_freeze_copy(obj)
+      case obj
+      when Array
+        obj.map { |e| deep_freeze_copy(e) }.freeze
+      when Hash
+        obj.each_with_object({}) { |(k, v), h| h[deep_freeze_copy(k)] = deep_freeze_copy(v) }.freeze
+      when String
+        -obj
+      else
+        obj
+      end
     end
   end
 end
