@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Raise `ArgumentError` at definition time when `memoize` is called on a method name that does not exist on the class — previously the error only surfaced at runtime when `super` had nothing to call
+
 ## [0.7.0] - 2026-05-18
 
 - Add `memo_preload` to batch-warm multiple cache entries in one call
