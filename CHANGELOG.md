@@ -11,6 +11,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 ### Added
 
 - Raise `ArgumentError` at definition time when `memoize` is called on a method that does not exist on the class — previously the error only surfaced at runtime when `super` had nothing to call
+- Key serialization safety: argument arrays, hashes, and strings are deep-frozen into an independent copy when the cache key is built, so callers that mutate their arguments after a call can no longer corrupt or miss the cached entry
 
 ## [0.7.0] - 2026-05-18
 

@@ -34,7 +34,7 @@ The gem ships with a comprehensive feature set:
 | Feature | Description | Status |
 |---|---|---|
 | ~~Descriptive argument errors~~ | Raise ArgumentError at definition time when memoize is called on a method that does not exist on the class | Shipped |
-| Key serialization safety | Deep-freeze argument keys stored in the cache to prevent subtle mutation bugs when callers modify objects they passed in | Planned |
+| ~~Key serialization safety~~ | Deep-freeze argument keys stored in the cache to prevent subtle mutation bugs when callers modify objects they passed in | Shipped |
 | `memo_inspect` | Single-entry deep-inspection helper returning all metadata (value, hits, misses, TTL remaining, age, custom key, LRU position) for one cached call in one shot | Planned |
 | Deprecation infrastructure | Add an internal `SafeMemoize.deprecate` helper so future breaking changes can be signalled clearly before they land | Planned |
 | `memoize_all only:` | Symmetric counterpart to `except:` for explicitly listing the methods to memoize rather than excluding specific ones | Planned |
