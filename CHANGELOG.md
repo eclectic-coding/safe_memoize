@@ -14,6 +14,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 - Key serialization safety: argument arrays, hashes, and strings are deep-frozen into an independent copy when the cache key is built, so callers that mutate their arguments after a call can no longer corrupt or miss the cached entry
 - `memo_inspect` — single-entry deep-inspection helper returning all metadata for one cached call in one mutex-held read: `cached`, `value`, `hits`, `misses`, `ttl_remaining`, `age`, `custom_key`, and `lru_position`; returns `nil` when the entry is not cached
 - Deprecation infrastructure: `SafeMemoize.deprecate(subject, message:, horizon:)` emits a structured `[SafeMemoize]` warning to stderr by default; configurable via `SafeMemoize.configure { |c| c.on_deprecation = ->(msg) { ... } }` to raise, log, or collect warnings
+- `memoize_all only:` — symmetric counterpart to `except:`; explicitly lists the methods to memoize and skips all others; raises `ArgumentError` when both `only:` and `except:` are given
 
 ## [0.7.0] - 2026-05-18
 
