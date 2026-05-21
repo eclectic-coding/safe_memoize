@@ -23,6 +23,7 @@ module SafeMemoize
     attr_accessor default_ttl: Numeric?
     attr_accessor default_max_size: Integer?
     attr_accessor on_deprecation: (^(String message) -> void)?
+    attr_accessor on_hook_error: (^(Exception error, Symbol hook_type, untyped cache_key) -> void)?
 
     def initialize: () -> void
   end
