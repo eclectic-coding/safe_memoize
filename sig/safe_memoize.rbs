@@ -26,6 +26,7 @@ module SafeMemoize
     attr_accessor on_hook_error: (^(Exception error, Symbol hook_type, untyped cache_key) -> void)?
     attr_accessor active_support_notifications: bool
     attr_accessor statsd_client: untyped
+    attr_accessor opentelemetry_tracer: untyped
 
     def initialize: () -> void
   end
@@ -191,6 +192,13 @@ module SafeMemoize
     include CustomKeyMethods
     include PublicCustomKeyMethods
     include LruMethods
+  end
+
+  module Adapters
+    module OpenTelemetry
+      SPAN_NAME: String
+      def self.trace: (untyped tracer, Symbol | String method_name, String? class_name) { () -> untyped } -> untyped
+    end
   end
 
   module Rails

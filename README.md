@@ -57,6 +57,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Deprecation infrastructure for gem authors](#deprecation)
 - [Optional `ActiveSupport::Notifications` integration for Rails observability](#activesupportnotifications)
 - [Optional StatsD adapter for metrics pipelines](#statsd)
+- [Optional OpenTelemetry adapter for distributed tracing](#opentelemetry)
 - [Rails request-scope helpers for controllers and service objects](#rails-request-scope)
 - [Batch cache warm-up via `memo_preload`](#cache-warm-up-and-persistence)
 - [`on_memo_store` hook fires on every cache write](#lifecycle-hooks)
@@ -766,6 +767,31 @@ SafeMemoize then calls `client.increment(metric, tags: [...])` on every cache ev
 Each call includes two tags: `method:method_name` and `class:ClassName`. The client must respond to `increment(metric, tags: [...])` — the interface used by `dogstatsd-ruby`, `statsd-instrument`, and most modern StatsD clients.
 
 If the client raises, the error is rescued and a warning is emitted to stderr rather than propagated to the caller. `statsd_client` defaults to `nil` (disabled).
+
+[↑ Back to features](#features)
+
+### OpenTelemetry
+
+`SafeMemoize::Adapters::OpenTelemetry` wraps the computation on each cache miss in an OpenTelemetry span, making memoized call costs visible in distributed traces. Assign a tracer once in your initializer:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.opentelemetry_tracer = OpenTelemetry.tracer_provider.tracer(
+    "safe_memoize",
+    SafeMemoize::VERSION
+  )
+end
+```
+
+SafeMemoize then wraps every cache miss (the actual method call, not cache hits) in a span named `"safe_memoize.compute"` with the following attributes:
+
+| Attribute | Value |
+|---|---|
+| `safe_memoize.method` | Name of the memoized method |
+| `safe_memoize.class` | Name of the host class |
+| `safe_memoize.cache_hit` | Always `false` — only misses are traced |
+
+Cache hits produce no spans, so tracing overhead is zero for cached calls. The adapter is compatible with any tracer that responds to `in_span(name, attributes:, &block)` — the interface provided by `opentelemetry-sdk`, `opentelemetry-api`, and no-op tracers alike. If `opentelemetry_tracer` is `nil` (the default), the adapter is completely bypassed.
 
 [↑ Back to features](#features)
 
