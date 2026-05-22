@@ -12,6 +12,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 - `SafeMemoize::Stores::Base` — abstract adapter base class defining the cache store contract: `read(key)`, `write(key, value, expires_in: nil)`, `delete(key)`, `clear`, `keys`, and `exist?(key)`; a frozen `MISS` sentinel on `Base` distinguishes cache misses from cached `nil` or `false` values; `exist?` has a default implementation that delegates to `read`
 - `SafeMemoize::Stores::Memory` — built-in in-process store that wraps a plain `Hash` behind a `Mutex`; supports per-entry TTL via `expires_in:` with lazy expiry on read; serves as both the default store and the reference implementation for custom adapters
+- `store:` option on `memoize` — accepts any `Stores::Base` subclass instance; routes all reads and writes through the adapter's `read`/`write` interface; the store is shared across all instances of the class; `ttl:` is forwarded as `expires_in:` to `write`, `ttl_refresh:` re-writes on every hit, and `if:`/`unless:` conditional storage is enforced at the SafeMemoize layer; raises `ArgumentError` if combined with `max_size:` (LRU belongs in the adapter) or `shared:`
 
 ## [1.0.0] - 2026-05-22
 
