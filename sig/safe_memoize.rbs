@@ -192,5 +192,20 @@ module SafeMemoize
     include PublicCustomKeyMethods
     include LruMethods
   end
+
+  module Rails
+    def self.track: (untyped instance) -> void
+    def self.reset_tracked!: () -> void
+
+    module RequestScoped
+      def self.included: (Module base) -> void
+      def reset_request_memos: () -> void
+    end
+
+    class Middleware
+      def initialize: (untyped app) -> void
+      def call: (untyped env) -> untyped
+    end
+  end
 end
 
