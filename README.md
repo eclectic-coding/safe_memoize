@@ -14,7 +14,7 @@ Beyond the basics, SafeMemoize ships with TTL expiration (including sliding wind
 
 ## The Problem
 
-Ruby's common memoization pattern breaks with falsy values:
+Ruby's common memoization pattern breaks with falsy values: 
 
 ```ruby
 def user
@@ -51,6 +51,10 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Bulk memoization via `memoize_all` (public, protected, and private)](#bulk-memoization)
 - [Custom cache key generation per method](#custom-cache-keys)
 - [TTL introspection via `memo_ttl_remaining`](#cache-inspection)
+- [Deep single-entry inspection via `memo_inspect`](#cache-inspection)
+- [`ArgumentError` at definition time when memoizing an undefined method](#basic-memoization)
+- [Hook error isolation — hook exceptions never propagate to callers](#lifecycle-hooks)
+- [Deprecation infrastructure for gem authors](#deprecation)
 
 ## Installation
 
@@ -88,6 +92,8 @@ class UserService
 end
 ```
 
+Calling `memoize` on a method name that does not exist raises `ArgumentError` immediately at class definition time rather than at the first runtime call.
+
 ### With arguments
 
 Results are cached per unique argument combination:
@@ -108,6 +114,8 @@ calc.compute(1, 2)  # computes and caches
 calc.compute(1, 2)  # returns cached result
 calc.compute(3, 4)  # computes and caches (different args)
 ```
+
+Argument arrays, hashes, and strings are deep-frozen into an independent copy when the cache key is built, so mutating arguments after a call cannot corrupt or miss a cached entry.
 
 ### Nil and false safety
 
@@ -199,6 +207,26 @@ obj.clear_memo_hooks              # Clears all hooks
 ```
 
 Hooks are per-instance and do not affect other objects of the same class.
+
+#### Hook error isolation
+
+Exceptions raised inside a hook never propagate to the caller. By default a warning is emitted to stderr:
+
+```
+[SafeMemoize] Hook error in on_miss: undefined method `log' for nil
+```
+
+Configure a custom handler via `SafeMemoize.configure`:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.on_hook_error = ->(error, hook_type, cache_key) {
+    MyErrorTracker.capture(error, context: { hook: hook_type, key: cache_key })
+  }
+end
+```
+
+Set `c.on_hook_error = :raise` to re-raise exceptions instead of swallowing them.
 
 ### TTL expiration
 
@@ -432,6 +460,14 @@ Use `except:` to skip specific methods:
 memoize_all except: [:version, :name]
 ```
 
+Use `only:` to explicitly list the methods to memoize and skip all others:
+
+```ruby
+memoize_all only: [:database_url, :redis_url]
+```
+
+`only:` and `except:` are mutually exclusive — passing both raises `ArgumentError`.
+
 By default only public methods defined directly on the class are memoized. Use `include_protected:` or `include_private:` to opt those visibilities in:
 
 ```ruby
@@ -502,6 +538,24 @@ obj.memo_ttl_remaining(:current_user)            # => nil    (no TTL set)
 obj.memo_ttl_remaining(:find, 42)                # => 0      (not cached or already expired)
 ```
 
+`memo_inspect` returns all metadata for one cached entry in a single mutex-held read:
+
+```ruby
+obj.memo_inspect(:find, 42)
+# => {
+#      cached: true,
+#      value: <result>,
+#      hits: 5,
+#      misses: 1,
+#      ttl_remaining: 47.2,
+#      age: 12.8,
+#      custom_key: nil,
+#      lru_position: 1
+#    }
+```
+
+Returns `nil` when the entry is not cached.
+
 ### Cache metrics
 
 Each instance tracks hits, misses, and computation time automatically.
@@ -528,6 +582,37 @@ obj.cache_metrics_reset      # Clears all collected metrics
 ```
 
 Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
+
+### Deprecation
+
+SafeMemoize ships a structured deprecation helper for gem authors who build on top of it:
+
+```ruby
+SafeMemoize.deprecate(
+  "MyGem::OldHelper",
+  message: "Use MyGem::NewHelper instead",
+  horizon: "2.0.0"
+)
+# => [SafeMemoize] DEPRECATED: MyGem::OldHelper — Use MyGem::NewHelper instead (removal horizon: 2.0.0)
+```
+
+The warning is emitted to stderr by default. Configure a custom handler via `SafeMemoize.configure`:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.on_deprecation = ->(msg) { Rails.logger.warn(msg) }
+end
+```
+
+To raise on deprecation warnings in test environments:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.on_deprecation = ->(msg) { raise msg }
+end
+```
+
+Call `SafeMemoize.reset_configuration!` to restore all global defaults.
 
 ## Development
 
