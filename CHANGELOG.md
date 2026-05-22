@@ -8,6 +8,10 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- `ActiveSupport::Notifications` integration — opt-in via `SafeMemoize.configure { |c| c.active_support_notifications = true }`; emits `cache_hit.safe_memoize`, `cache_miss.safe_memoize`, `cache_evict.safe_memoize`, `cache_expire.safe_memoize`, and `cache_store.safe_memoize` events; each payload includes `:method`, `:key`, and `:class`; zero overhead when ActiveSupport is not loaded
+
 ## [0.8.0] - 2026-05-21
 
 ### Added
