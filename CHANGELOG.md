@@ -8,6 +8,11 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Fixed
+
+- Codecov reporting accuracy — switched SimpleCov output from `.resultset.json` (internal format, misread by Codecov as ~85%) to `coverage/coverage.json` via `simplecov_json_formatter`; CI now uploads the correct file
+- CI coverage ordering — `bundle exec rspec` ran files alphabetically, causing `ractor_spec.rb` to execute before `spec/stores/`, disrupting Ruby's Coverage counters and dropping reported coverage to ~96%; CI now uses `bundle exec rake spec`, which enforces the store-first ordering already documented in the Rakefile
+
 ## [1.1.0] - 2026-05-22
 
 ### Added
@@ -25,7 +30,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 - `store:` type guard in `ClassMethods#memoize` collapsed to an inline guard clause so Ruby's Coverage module counts the raise correctly
 - Hook-error isolation tests (`concurrency_spec`, `hooks_spec`) now configure `on_hook_error = ->(*) {}` to silence expected stderr warnings rather than leaking them into test output; StatsD error-resilience test asserts on the emitted warning with `expect { }.to output(...).to_stderr`
 
-## [1.0.0] - 2026-05-22
+## [1.0.0] - 2026-05-22 
 
 ### Added
 
