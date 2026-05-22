@@ -8,6 +8,10 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- Ractor compatibility audit — `spec/ractor_spec.rb` documents the specific failure modes (non-shareable closures in `define_method` blocks, `Ractor::IsolationError` on `SafeMemoize.configuration`); README section explains the limitation and the Thread-based workaround
+
 ## [0.9.0] - 2026-05-22
 
 ### Added
