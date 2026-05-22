@@ -16,7 +16,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 | Ractor compatibility audit | Investigate and either support Ractor-compatible operation (Mutex replacement, shared-cache storage) or document the limitation clearly | Shipped |
 | Ruby version policy | Formalise the supported Ruby version window and cadence for dropping EOL versions | Shipped |
 | Deprecation sweep | Resolve or formally deprecate any unstable internal APIs before the stable release | Shipped |
-| Upgrade guide | Document all breaking changes from 0.x and provide a migration path for users of deprecated behaviour | Planned |
+| Upgrade guide | Document all breaking changes from 0.x and provide a migration path for users of deprecated behaviour | Shipped |
 
 ---
 
