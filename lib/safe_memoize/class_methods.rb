@@ -25,6 +25,10 @@ module SafeMemoize
     # @param key [Proc, nil] class-level custom cache key generator. Receives the same
     #   arguments as the method and should return a single comparable value. Instance-level
     #   keys set via {PublicCustomKeyMethods#memoize_with_custom_key} take priority.
+    # @param store [Stores::Base, nil] custom cache store adapter. Must be a
+    #   {Stores::Base} subclass instance. The store is shared across all instances of the
+    #   class. When +nil+, the default per-instance in-process hash is used.
+    #   Cannot be combined with +max_size:+ or +shared:+.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -38,7 +42,11 @@ module SafeMemoize
     #
     # @example Conditional — only cache successful responses
     #   memoize :fetch, if: ->(v) { v[:status] == 200 }
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil)
+    #
+    # @example With a custom store
+    #   STORE = SafeMemoize::Stores::Memory.new
+    #   memoize :fetch, store: STORE, ttl: 300
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -85,6 +93,14 @@ module SafeMemoize
       raise ArgumentError, ":unless must be callable" if cond_unless && !cond_unless.respond_to?(:call)
       raise ArgumentError, ":key must be callable" if key && !key.respond_to?(:call)
 
+      if store
+        unless store.is_a?(SafeMemoize::Stores::Base)
+          raise ArgumentError, "store: must be a SafeMemoize::Stores::Base instance (got #{store.class})"
+        end
+        raise ArgumentError, "max_size: is not supported with store: — use the store adapter's own eviction" if max_size
+        raise ArgumentError, "shared: and store: cannot be combined" if shared
+      end
+
       __safe_memo_class_key_generators__[method_name] = key if key
 
       # Normalize to a single "should cache?" predicate
@@ -92,6 +108,49 @@ module SafeMemoize
         cond_if
       elsif cond_unless
         ->(result) { !cond_unless.call(result) }
+      end
+
+      if store
+        miss = SafeMemoize::Stores::Base::MISS
+
+        mod = Module.new do
+          define_method(method_name) do |*args, **kwargs, &block|
+            return super(*args, **kwargs, &block) if block
+
+            cache_key = compute_cache_key(method_name, args, kwargs)
+            cached = store.read(cache_key)
+
+            unless cached.equal?(miss)
+              store.write(cache_key, cached, expires_in: ttl) if ttl_refresh
+              record_cache_hit(method_name, args, kwargs)
+              call_memo_hooks(:on_hit, cache_key, {value: cached, expires_at: nil, cached_at: nil})
+              return cached
+            end
+
+            start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            value = Adapters::OpenTelemetry.trace(
+              SafeMemoize.configuration.opentelemetry_tracer, method_name, self.class.name
+            ) { super(*args, **kwargs) }
+            elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+
+            now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            if !condition || condition.call(value)
+              store.write(cache_key, value, expires_in: ttl)
+              call_memo_hooks(:on_store, cache_key, {value: value, expires_at: nil, cached_at: now})
+            end
+
+            record_cache_miss(method_name, args, kwargs, elapsed_time)
+            call_memo_hooks(:on_miss, cache_key, {value: value, expires_at: nil, cached_at: now})
+
+            value
+          end
+
+          send(visibility, method_name)
+        end
+
+        prepend mod
+
+        return
       end
 
       if shared
