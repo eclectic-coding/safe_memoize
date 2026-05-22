@@ -199,6 +199,32 @@ module SafeMemoize
     include LruMethods
   end
 
+  module Stores
+    class Base
+      MISS: Object
+
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+      def exist?: (untyped key) -> bool
+    end
+
+    class Memory < Base
+      def initialize: () -> void
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+
+      private
+
+      def expired?: ({ expires_at: Float?, value: untyped, cached_at: Float }) -> bool
+    end
+  end
+
   module Adapters
     module StatsD
       METRIC_NAMES: Hash[Symbol, String]
