@@ -53,7 +53,7 @@ jobs:
           bundler-cache: true
 
       - name: Run test suite
-        run: bundle exec rspec
+        run: bundle exec rake spec
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
