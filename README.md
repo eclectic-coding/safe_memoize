@@ -103,6 +103,8 @@ end
 
 Calling `memoize` on a method name that does not exist raises `ArgumentError` immediately at class definition time rather than at the first runtime call.
 
+[↑ Back to features](#features)
+
 ### With arguments
 
 Results are cached per unique argument combination:
@@ -126,6 +128,8 @@ calc.compute(3, 4)  # computes and caches (different args)
 
 Argument arrays, hashes, and strings are deep-frozen into an independent copy when the cache key is built, so mutating arguments after a call cannot corrupt or miss a cached entry.
 
+[↑ Back to features](#features)
+
 ### Nil and false safety
 
 ```ruby
@@ -139,6 +143,8 @@ class Config
   memoize :enabled?
 end
 ```
+
+[↑ Back to features](#features)
 
 ### Works with private methods
 
@@ -159,6 +165,8 @@ class TokenProvider
 end
 ```
 
+[↑ Back to features](#features)
+
 ### Cache reset
 
 ```ruby
@@ -168,6 +176,8 @@ obj.reset_memo(:find_user, 42)                  # Clears only the cached call fo
 obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword combination
 obj.reset_all_memos                             # Clears all memoized values
 ```
+
+[↑ Back to features](#features)
 
 ### Lifecycle hooks
 
@@ -245,6 +255,8 @@ end
 
 Set `c.on_hook_error = :raise` to re-raise exceptions instead of swallowing them.
 
+[↑ Back to features](#features)
+
 ### TTL expiration
 
 ```ruby
@@ -275,6 +287,8 @@ obj.memo_refresh(:current_quote)             # Recomputes and re-caches
 obj.memo_refresh(:find, 42)                  # Recomputes for one argument combination
 ```
 
+[↑ Back to features](#features)
+
 ### Sliding window TTL
 
 Add `ttl_refresh: true` to reset the expiry clock on every cache hit, so the entry only expires after a full TTL of inactivity:
@@ -291,6 +305,8 @@ end
 ```
 
 Without `ttl_refresh:`, the entry expires 300 seconds after it was first cached. With it, the clock resets on every read — the entry is evicted only if the method goes 300 seconds without being called. `ttl_refresh: true` requires `ttl:` to be set and works with both per-instance and `shared: true` memoization.
+
+[↑ Back to features](#features)
 
 ### LRU cache size limit
 
@@ -325,6 +341,8 @@ memoize :find, max_size: 50, ttl: 300
 
 The `on_evict` hook fires for LRU-evicted entries the same way it does for manual `reset_memo` calls.
 
+[↑ Back to features](#features)
+
 ### Conditional caching
 
 Use `if:` to cache a result only when the predicate returns truthy, or `unless:` to skip caching when it returns truthy. Calls that don't satisfy the condition recompute every time until they do.
@@ -358,6 +376,8 @@ Both options accept any callable and compose with `ttl:` and `max_size:`:
 ```ruby
 memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 ```
+
+[↑ Back to features](#features)
 
 ### Cache warm-up and persistence
 
@@ -423,6 +443,8 @@ obj.load_memo(Marshal.load(raw)) if raw
 
 Loaded entries have no TTL — they persist until explicitly reset. Expired entries are excluded from `dump_memo` output, so snapshots never contain stale data.
 
+[↑ Back to features](#features)
+
 ### Shared cache
 
 Pass `shared: true` to store results on the class instead of per-instance. All instances share one cache, so the method is computed only once regardless of how many objects exist.
@@ -470,6 +492,8 @@ memoize :find, shared: true, max_size: 500
 ```
 
 Hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`, `on_memo_evict`) fire on the calling instance as usual.
+
+[↑ Back to features](#features)
 
 ### Bulk memoization
 
@@ -527,6 +551,8 @@ memoize_all include_protected: true, include_private: true
 
 Inherited methods are never affected regardless of visibility.
 
+[↑ Back to features](#features)
+
 ### Custom cache keys
 
 By default the cache key is derived from the method name and all arguments. Use the `key:` option on `memoize` to set a class-level key generator that applies to every instance:
@@ -574,6 +600,8 @@ svc.clear_custom_keys(:generate)  # Remove generator for one method
 svc.clear_custom_keys             # Remove all custom key generators
 ```
 
+[↑ Back to features](#features)
+
 ### Cache inspection
 
 ```ruby
@@ -618,6 +646,8 @@ obj.memo_inspect(:find, 42)
 
 Returns `nil` when the entry is not cached.
 
+[↑ Back to features](#features)
+
 ### Cache metrics
 
 Each instance tracks hits, misses, and computation time automatically.
@@ -646,6 +676,8 @@ obj.cache_metrics_reset(:find)    # Clears metrics for one method only
 
 Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
 
+[↑ Back to features](#features)
+
 ### Global configuration
 
 Use `SafeMemoize.configure` to set defaults that apply to all subsequently memoized methods. Per-call options always take precedence over global defaults.
@@ -664,6 +696,8 @@ SafeMemoize.reset_configuration!
 ```
 
 The configure block also accepts `on_hook_error`, `on_deprecation`, and `active_support_notifications` handlers (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), and [ActiveSupport::Notifications](#activesupportnotifications)).
+
+[↑ Back to features](#features)
 
 ### ActiveSupport::Notifications
 
@@ -705,6 +739,8 @@ end
 
 The integration is a no-op when ActiveSupport is not loaded — there is no overhead for non-Rails projects. `active_support_notifications` defaults to `false`.
 
+[↑ Back to features](#features)
+
 ### Deprecation
 
 SafeMemoize ships a structured deprecation helper for gem authors who build on top of it:
@@ -733,6 +769,8 @@ SafeMemoize.configure do |c|
   c.on_deprecation = ->(msg) { raise msg }
 end
 ```
+
+[↑ Back to features](#features)
 
 ## Development
 
