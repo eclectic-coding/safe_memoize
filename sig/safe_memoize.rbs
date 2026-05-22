@@ -7,6 +7,7 @@ module SafeMemoize
   type memo_key = default_memo_key | custom_memo_key
   type memo_record = { value: untyped, expires_at: Float?, cached_at: Float }
 
+  @configuration: Configuration?
   @__safe_memo_cache__: Hash[memo_key, memo_record]?
   @__safe_memo_mutex__: Mutex?
   @__safe_memo_shared_cache__: Hash[memo_key, memo_record]?
