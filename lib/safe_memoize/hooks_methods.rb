@@ -2,6 +2,14 @@
 
 module SafeMemoize
   module HooksMethods
+    NOTIFICATION_EVENT_NAMES = {
+      on_hit: "cache_hit.safe_memoize",
+      on_miss: "cache_miss.safe_memoize",
+      on_evict: "cache_evict.safe_memoize",
+      on_expire: "cache_expire.safe_memoize",
+      on_store: "cache_store.safe_memoize"
+    }.freeze
+
     private
 
     def memo_hook_store
@@ -29,6 +37,24 @@ module SafeMemoize
           warn "[SafeMemoize] Hook error in #{hook_type}: #{error.message}"
         end
       end
+
+      safe_memo_notify(hook_type, cache_key) if SafeMemoize.configuration.active_support_notifications
+    end
+
+    def safe_memo_notify(hook_type, cache_key)
+      return unless defined?(ActiveSupport::Notifications)
+
+      asn = ActiveSupport::Notifications
+      return unless asn.respond_to?(:instrument)
+
+      event = NOTIFICATION_EVENT_NAMES[hook_type]
+      return unless event
+
+      asn.instrument(event, {
+        method: cache_key[0],
+        key: cache_key,
+        class: self.class.name
+      })
     end
 
     def _clear_memo_hooks(hook_type = nil)
