@@ -2,6 +2,7 @@
 
 require_relative "safe_memoize/version"
 require_relative "safe_memoize/configuration"
+require_relative "safe_memoize/adapters/statsd"
 require_relative "safe_memoize/class_methods"
 require_relative "safe_memoize/public_methods"
 require_relative "safe_memoize/cache_store_methods"

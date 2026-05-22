@@ -56,6 +56,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Hook error isolation — hook exceptions never propagate to callers](#lifecycle-hooks)
 - [Deprecation infrastructure for gem authors](#deprecation)
 - [Optional `ActiveSupport::Notifications` integration for Rails observability](#activesupportnotifications)
+- [Optional StatsD adapter for metrics pipelines](#statsd)
 - [Batch cache warm-up via `memo_preload`](#cache-warm-up-and-persistence)
 - [`on_memo_store` hook fires on every cache write](#lifecycle-hooks)
 - [Global default TTL and max size via `SafeMemoize.configure`](#global-configuration)
@@ -695,7 +696,7 @@ Both settings apply at definition time — methods already memoized before `conf
 SafeMemoize.reset_configuration!
 ```
 
-The configure block also accepts `on_hook_error`, `on_deprecation`, and `active_support_notifications` handlers (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), and [ActiveSupport::Notifications](#activesupportnotifications)).
+The configure block also accepts `on_hook_error`, `on_deprecation`, `active_support_notifications`, and `statsd_client` (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), [ActiveSupport::Notifications](#activesupportnotifications), and [StatsD](#statsd)).
 
 [↑ Back to features](#features)
 
@@ -738,6 +739,32 @@ end
 ```
 
 The integration is a no-op when ActiveSupport is not loaded — there is no overhead for non-Rails projects. `active_support_notifications` defaults to `false`.
+
+[↑ Back to features](#features)
+
+### StatsD
+
+Route cache lifecycle events to any StatsD-compatible client via `SafeMemoize::Adapters::StatsD`. Assign the client once in your initializer:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.statsd_client = Datadog::Statsd.new("localhost", 8125)
+end
+```
+
+SafeMemoize then calls `client.increment(metric, tags: [...])` on every cache event:
+
+| Metric | Fires when |
+|---|---|
+| `safe_memoize.hit` | A cached value is returned |
+| `safe_memoize.miss` | The method is called and no cached value exists |
+| `safe_memoize.store` | A value is written to the cache (miss, `warm_memo`, or `load_memo`) |
+| `safe_memoize.evict` | An entry is removed via `reset_memo`, `reset_all_memos`, or LRU eviction |
+| `safe_memoize.expire` | An expired TTL entry is pruned |
+
+Each call includes two tags: `method:method_name` and `class:ClassName`. The client must respond to `increment(metric, tags: [...])` — the interface used by `dogstatsd-ruby`, `statsd-instrument`, and most modern StatsD clients.
+
+If the client raises, the error is rescued and a warning is emitted to stderr rather than propagated to the caller. `statsd_client` defaults to `nil` (disabled).
 
 [↑ Back to features](#features)
 

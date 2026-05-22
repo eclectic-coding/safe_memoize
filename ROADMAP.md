@@ -11,7 +11,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 | Feature | Description | Status |
 |---|---|---|
 | ActiveSupport::Notifications integration | Emit `cache.hit`, `cache.miss`, `cache.evict`, and `cache.expire` events when ActiveSupport is available (opt-in via configuration) | Shipped |
-| StatsD adapter | Thin optional module (`SafeMemoize::Adapters::StatsD`) that routes lifecycle hooks to a StatsD client with sensible metric names and tags | Planned |
+| StatsD adapter | Thin optional module (`SafeMemoize::Adapters::StatsD`) that routes lifecycle hooks to a StatsD client with sensible metric names and tags | Shipped |
 | OpenTelemetry spans | Optional adapter (`SafeMemoize::Adapters::OpenTelemetry`) wrapping computation time in a trace span for distributed tracing pipelines | Planned |
 | Rails request-scope helper | Guide + optional mixin for resetting instance memos at the end of each request (controller concern, middleware, or Active Model pattern) | Planned |
 | Formal benchmark suite | `benchmarks/` directory with comparisons against `memery`, `memo_wise`, and raw `||=`, covering single-threaded throughput and contention under concurrent load | Planned |
