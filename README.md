@@ -948,9 +948,146 @@ To preview the changelog/version update without changing anything, use:
 bin/release 0.1.1 --dry-run
 ```
 
+## Public API and versioning guarantee
+
+From **v1.0.0** onwards SafeMemoize follows [Semantic Versioning](https://semver.org/). The table below declares every constant, method, and option key that forms the public contract. If you only call items listed here, you are guaranteed that:
+
+- **Patch** releases (1.x.**y**) contain bug fixes only — no behaviour changes.
+- **Minor** releases (1.**x**.0) add new features in a backwards-compatible way.
+- **Major** releases (**x**.0.0) may break the items below; a migration guide will be published for every such release.
+
+Anything **not** listed here — internal modules, private methods, `@__safe_memo_*__` ivars, the structure of the cache hash itself — is subject to change without notice in any release, including patch releases.
+
+### Top-level module
+
+| Symbol | Kind | Notes |
+|---|---|---|
+| `SafeMemoize::VERSION` | constant | Semver string, always present |
+| `SafeMemoize.configure { \|c\| … }` | module method | Yields `Configuration`; sets global defaults |
+| `SafeMemoize.configuration` | module method | Returns the current `Configuration` |
+| `SafeMemoize.reset_configuration!` | module method | Restores all configuration to defaults |
+| `SafeMemoize.deprecate(subject, message:, horizon:)` | module method | Emits a structured deprecation warning |
+
+### `memoize` DSL (class method, added by `prepend SafeMemoize`)
+
+| Option key | Type | Default | Notes |
+|---|---|---|---|
+| `ttl:` | `Numeric \| nil` | `nil` | Seconds until entry expires |
+| `ttl_refresh:` | `Boolean` | `false` | Sliding window — resets clock on every hit |
+| `max_size:` | `Integer \| nil` | `nil` | LRU entry limit per method |
+| `if:` | `Symbol \| Proc \| nil` | `nil` | Store only when truthy |
+| `unless:` | `Symbol \| Proc \| nil` | `nil` | Store only when falsy |
+| `shared:` | `Boolean` | `false` | Class-level shared cache |
+| `key:` | `Proc \| nil` | `nil` | Class-level custom key generator |
+
+### `memoize_all` options (class method)
+
+All `memoize` option keys above, plus:
+
+| Option key | Type | Default |
+|---|---|---|
+| `except:` | `Array<Symbol>` | `[]` |
+| `only:` | `Array<Symbol>` | `[]` |
+| `include_protected:` | `Boolean` | `false` |
+| `include_private:` | `Boolean` | `false` |
+
+### Instance methods (public)
+
+**Inspection**
+
+| Method | Returns |
+|---|---|
+| `memoized?(method_name, *args, **kwargs)` | `Boolean` |
+| `memo_count(method_name = nil)` | `Integer` |
+| `memo_keys(method_name = nil)` | `Array` |
+| `memo_values(method_name = nil)` | `Array` |
+| `memo_inspect(method_name, *args, **kwargs)` | `Hash \| nil` |
+| `memo_ttl_remaining(method_name, *args, **kwargs)` | `Numeric \| nil` |
+| `memo_age(method_name, *args, **kwargs)` | `Numeric \| nil` |
+| `memo_stale?(method_name, *args, **kwargs)` | `Boolean` |
+
+**Invalidation and mutation**
+
+| Method | Returns |
+|---|---|
+| `reset_memo(method_name, *args, **kwargs)` | `nil` |
+| `reset_all_memos` | `nil` |
+| `memo_touch(method_name, *args, ttl: nil, **kwargs)` | `Boolean` |
+| `memo_refresh(method_name, *args, **kwargs)` | cached value |
+
+**Warm-up and persistence**
+
+| Method | Returns |
+|---|---|
+| `warm_memo(method_name, *args, ttl: nil, **kwargs)` | cached value |
+| `memo_preload(method_name, *arg_sets)` | `Array` |
+| `dump_memo(method_name = nil)` | `Hash` |
+| `load_memo(snapshot)` | `nil` |
+
+**Lifecycle hooks**
+
+| Method | Fires when |
+|---|---|
+| `on_memo_hit { \|key\| … }` | cache hit |
+| `on_memo_miss { \|key\| … }` | cache miss |
+| `on_memo_store { \|key, value\| … }` | value written |
+| `on_memo_expire { \|key\| … }` | TTL expires |
+| `on_memo_evict { \|key\| … }` | LRU eviction |
+| `clear_memo_hooks(hook_type = nil)` | — |
+
+**Metrics**
+
+| Method | Returns |
+|---|---|
+| `cache_stats` | `Hash` |
+| `cache_stats_for(method_name)` | `Hash` |
+| `cache_hit_rate` | `Float` |
+| `cache_miss_rate` | `Float` |
+| `cache_metrics_reset(method_name = nil)` | `nil` |
+
+**Custom keys**
+
+| Method | Notes |
+|---|---|
+| `memoize_with_custom_key(method_name) { \|*args, **kwargs\| … }` | Instance-level key generator |
+| `clear_custom_keys(method_name = nil)` | Remove one or all key generators |
+
+### Shared-cache class methods (added when any method uses `shared: true`)
+
+| Method | Returns |
+|---|---|
+| `reset_shared_memo(method_name, *args, **kwargs)` | `nil` |
+| `reset_all_shared_memos` | `nil` |
+| `shared_memoized?(method_name, *args, **kwargs)` | `Boolean` |
+| `shared_memo_count(method_name = nil)` | `Integer` |
+| `shared_memo_age(method_name, *args, **kwargs)` | `Numeric \| nil` |
+| `shared_memo_stale?(method_name, *args, **kwargs)` | `Boolean` |
+
+### `SafeMemoize::Configuration` attributes
+
+| Attribute | Type | Default |
+|---|---|---|
+| `default_ttl` | `Numeric \| nil` | `nil` |
+| `default_max_size` | `Integer \| nil` | `nil` |
+| `on_deprecation` | `Proc \| nil` | `nil` (writes to stderr) |
+| `on_hook_error` | `Proc \| nil` | `nil` (warns to stderr) |
+| `active_support_notifications` | `Boolean` | `false` |
+| `statsd_client` | `Object \| nil` | `nil` |
+| `opentelemetry_tracer` | `Object \| nil` | `nil` |
+
+### Opt-in extensions (not guaranteed until their owning milestone ships)
+
+The following are available now but reside under `require "safe_memoize/rails"` and are not covered by the v1.0.0 semver guarantee until the v1.x milestone that owns them is declared stable:
+
+- `SafeMemoize::Rails` module (`track`, `reset_tracked!`)
+- `SafeMemoize::Rails::RequestScoped` concern
+- `SafeMemoize::Rails::Middleware` Rack middleware
+- `SafeMemoize::Adapters::StatsD`
+- `SafeMemoize::Adapters::OpenTelemetry`
+
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the planned path from v0.7.0 to v1.0.0 and beyond, including upcoming features, API stability goals, and the versioning policy.
+See [ROADMAP.md](ROADMAP.md) for the planned path to v1.0.0 and beyond, including upcoming features, API stability goals, and the versioning policy.
 
 ## Contributing
 
