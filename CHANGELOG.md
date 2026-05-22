@@ -11,6 +11,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 ### Added
 
 - `ActiveSupport::Notifications` integration — opt-in via `SafeMemoize.configure { |c| c.active_support_notifications = true }`; emits `cache_hit.safe_memoize`, `cache_miss.safe_memoize`, `cache_evict.safe_memoize`, `cache_expire.safe_memoize`, and `cache_store.safe_memoize` events; each payload includes `:method`, `:key`, and `:class`; zero overhead when ActiveSupport is not loaded
+- `SafeMemoize::Adapters::StatsD` — thin optional adapter that routes lifecycle events to any StatsD client via `SafeMemoize.configure { |c| c.statsd_client = my_client }`; emits `safe_memoize.hit`, `safe_memoize.miss`, `safe_memoize.evict`, `safe_memoize.expire`, and `safe_memoize.store` with `method:` and `class:` tags; client errors are rescued and warned rather than raised
 
 ## [0.8.0] - 2026-05-21
 
