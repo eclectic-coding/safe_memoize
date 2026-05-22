@@ -1,5 +1,9 @@
 module SafeMemoize
   VERSION: String
+
+  class Error < StandardError
+  end
+
   include InstanceMethods
 
   type default_memo_key = [Symbol, Array[untyped], Hash[Symbol, untyped]]
@@ -65,7 +69,7 @@ module SafeMemoize
     def on_memo_miss: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def on_memo_store: { (memo_key cache_key, memo_record record) -> untyped } -> void
     def clear_memo_hooks: (?Symbol hook_type) -> void
-    def warm_memo: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) ?{ () -> untyped } -> untyped
+    def warm_memo: (Symbol | String method_name, *untyped args, ?ttl: Numeric?, **untyped kwargs) { () -> untyped } -> untyped
     def memo_preload: (Symbol | String method_name, *Array[untyped] arg_sets) -> Array[untyped]
     def dump_memo: (?Symbol | String method_name) -> Hash[memo_key, untyped]
     def load_memo: (Hash[memo_key, untyped] snapshot) -> nil

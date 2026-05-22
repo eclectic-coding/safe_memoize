@@ -402,6 +402,61 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    describe "custom key consistency — introspection methods respect custom keys" do
+      let(:klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def self.name = "TestClass"
+
+          def fetch(id)
+            "value_#{id}"
+          end
+
+          memoize :fetch
+        end
+      end
+
+      let(:instance) { klass.new }
+
+      before do
+        instance.memoize_with_custom_key(:fetch) { |id| "custom_#{id}" }
+        instance.fetch(1)
+      end
+
+      it "memoized? returns true for a custom-keyed entry" do
+        expect(instance.memoized?(:fetch, 1)).to be true
+      end
+
+      it "memo_ttl_remaining returns nil (no TTL) for a custom-keyed entry" do
+        expect(instance.memo_ttl_remaining(:fetch, 1)).to be_nil
+      end
+
+      it "memo_age returns a non-nil value for a custom-keyed entry" do
+        expect(instance.memo_age(:fetch, 1)).not_to be_nil
+      end
+
+      it "memo_stale? returns false for a live custom-keyed entry" do
+        expect(instance.memo_stale?(:fetch, 1)).to be false
+      end
+
+      it "reset_memo with args clears the custom-keyed entry" do
+        instance.reset_memo(:fetch, 1)
+        expect(instance.memoized?(:fetch, 1)).to be false
+      end
+
+      it "memo_refresh recomputes and re-caches a custom-keyed entry" do
+        allow(instance).to receive(:fetch).and_call_original
+        instance.memo_refresh(:fetch, 1)
+        expect(instance).to have_received(:fetch).once
+        expect(instance.memoized?(:fetch, 1)).to be true
+      end
+
+      it "memo_touch returns true for a live custom-keyed entry" do
+        expect(instance.memo_touch(:fetch, 1)).to be true
+      end
+    end
+
     describe "custom keys with default arguments" do
       it "supports methods with default arguments" do
         test_class_with_defaults = Class.new do

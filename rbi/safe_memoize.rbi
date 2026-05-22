@@ -13,6 +13,8 @@
 module SafeMemoize
   VERSION = T.let(T.unsafe(nil), String)
 
+  class Error < StandardError; end
+
   sig { params(base: T::Class[T.anything]).void }
   def self.prepended(base); end
 
@@ -139,7 +141,7 @@ module SafeMemoize
     sig { params(hook_type: T.nilable(Symbol)).void }
     def clear_memo_hooks(hook_type = nil); end
 
-    sig { params(method_name: T.any(Symbol, String), args: T.untyped, ttl: T.nilable(Numeric), kwargs: T.untyped, blk: T.nilable(T.proc.returns(T.untyped))).returns(T.untyped) }
+    sig { params(method_name: T.any(Symbol, String), args: T.untyped, ttl: T.nilable(Numeric), kwargs: T.untyped, blk: T.proc.returns(T.untyped)).returns(T.untyped) }
     def warm_memo(method_name, *args, ttl: nil, **kwargs, &blk); end
 
     sig { params(method_name: T.any(Symbol, String), arg_sets: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
