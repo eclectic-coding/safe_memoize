@@ -67,6 +67,8 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [`memo_age` and `memo_stale?` for TTL introspection](#cache-inspection)
 - [Class-level `key:` option for shared cache key generation](#custom-cache-keys)
 - [`shared_memo_age` and `shared_memo_stale?` for shared cache TTL inspection](#shared-cache)
+- [Pluggable external cache stores — Redis, Rails.cache, or any custom adapter](#pluggable-cache-stores)
+- [Global default store via `Configuration#default_store`](#pluggable-cache-stores)
 
 ## Installation
 
@@ -698,7 +700,7 @@ Both settings apply at definition time — methods already memoized before `conf
 SafeMemoize.reset_configuration!
 ```
 
-The configure block also accepts `on_hook_error`, `on_deprecation`, `active_support_notifications`, and `statsd_client` (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), [ActiveSupport::Notifications](#activesupportnotifications), and [StatsD](#statsd)).
+The configure block also accepts `on_hook_error`, `on_deprecation`, `active_support_notifications`, `statsd_client`, and `default_store` (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), [ActiveSupport::Notifications](#activesupportnotifications), [StatsD](#statsd), and [Pluggable cache stores](#pluggable-cache-stores)).
 
 [↑ Back to features](#features)
 
@@ -864,6 +866,107 @@ end
 
 [↑ Back to features](#features)
 
+### Pluggable cache stores
+
+By default, memoized results live in a per-instance hash — fast, but private to each object. Pass `store:` to route reads and writes through any external backend, enabling cross-process and distributed memoization.
+
+#### Built-in: `Stores::Memory`
+
+`Stores::Memory` is the built-in in-process store. It is used automatically by the `store:` default and is the reference implementation for custom adapters. You can pass your own instance to share a cache across multiple classes or to set a TTL on the shared store:
+
+```ruby
+SHARED_STORE = SafeMemoize::Stores::Memory.new
+
+class UserService
+  prepend SafeMemoize
+  def find(id) = User.find(id)
+  memoize :find, store: SHARED_STORE, ttl: 60
+end
+
+class PostService
+  prepend SafeMemoize
+  def author(post) = User.find(post.user_id)
+  memoize :author, store: SHARED_STORE
+end
+```
+
+The store is shared across all instances of a class, so the method is computed only once per unique argument set regardless of how many objects exist.
+
+#### Redis adapter
+
+Requires a Redis-compatible client (the `redis` gem or any drop-in replacement):
+
+```ruby
+require "safe_memoize/stores/redis"
+require "redis"
+
+REDIS_STORE = SafeMemoize::Stores::Redis.new(::Redis.new)
+
+class PricingService
+  prepend SafeMemoize
+  def quote(sku) = api_fetch(sku)
+  memoize :quote, store: REDIS_STORE, ttl: 300
+end
+```
+
+Values and keys are serialized with `Marshal` (Base64-encoded via `Array#pack("m0")`). TTL is forwarded to Redis as `PX` (milliseconds) for sub-second precision. `clear` uses `SCAN` so it never blocks the Redis event loop. All keys are namespace-scoped (default: `"safe_memoize"`) so multiple stores or applications can share one Redis instance:
+
+```ruby
+REDIS_STORE = SafeMemoize::Stores::Redis.new(::Redis.new, namespace: "myapp:memo")
+```
+
+#### Rails.cache adapter
+
+Wraps any `ActiveSupport::Cache::Store`, including `Rails.cache`:
+
+```ruby
+require "safe_memoize/stores/rails_cache"
+
+RAILS_STORE = SafeMemoize::Stores::RailsCache.new(Rails.cache)
+
+class CatalogService
+  prepend SafeMemoize
+  def fetch(slug) = Catalog.find_by!(slug: slug)
+  memoize :fetch, store: RAILS_STORE, ttl: 600
+end
+```
+
+Cached `nil` and `false` values are distinguished from a cache miss via a sentinel envelope, so falsy results are preserved correctly. TTL is forwarded as `expires_in:` for native store expiry. `clear` uses `delete_matched` scoped to the namespace.
+
+#### Custom adapters
+
+Subclass `SafeMemoize::Stores::Base` and implement the six-method contract:
+
+```ruby
+class MyStore < SafeMemoize::Stores::Base
+  def read(key)         = ...  # return MISS if absent
+  def write(key, value, expires_in: nil) = ...
+  def delete(key)       = ...
+  def clear             = ...
+  def keys              = ...  # Array of stored keys
+end
+```
+
+Use `SafeMemoize::Stores::Base::MISS` (a frozen sentinel object) as the return value from `read` when the key is absent — this distinguishes a cache miss from a cached `nil` or `false`.
+
+#### Global default store
+
+Set a default store for all compatible `memoize` calls without specifying `store:` on each one:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.default_store = SafeMemoize::Stores::Redis.new(::Redis.new)
+end
+```
+
+A per-method `store:` option always takes precedence. Methods using `max_size:` or `shared:` silently bypass the global default (LRU and shared-mode use their own storage). An invalid value raises `ArgumentError` at `memoize` time. Reset with `SafeMemoize.reset_configuration!`.
+
+#### Compatibility
+
+The `store:` option composes with `ttl:`, `ttl_refresh:`, `if:`, `unless:`, lifecycle hooks, and cache metrics. It is incompatible with `max_size:` (use the store adapter's own eviction) and `shared:` (raise `ArgumentError` if combined).
+
+[↑ Back to features](#features)
+
 ### Deprecation
 
 SafeMemoize ships a structured deprecation helper for gem authors who build on top of it:
@@ -982,6 +1085,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `unless:` | `Symbol \| Proc \| nil` | `nil` | Store only when falsy |
 | `shared:` | `Boolean` | `false` | Class-level shared cache |
 | `key:` | `Proc \| nil` | `nil` | Class-level custom key generator |
+| `store:` | `Stores::Base \| nil` | `nil` | External cache store adapter; incompatible with `max_size:` and `shared:` |
 
 ### `memoize_all` options (class method)
 
@@ -1077,10 +1181,20 @@ All `memoize` option keys above, plus:
 | `active_support_notifications` | `Boolean` | `false` |
 | `statsd_client` | `Object \| nil` | `nil` |
 | `opentelemetry_tracer` | `Object \| nil` | `nil` |
+| `default_store` | `Stores::Base \| nil` | `nil` |
+
+### Store adapter classes (v1.1.0+)
+
+| Class | Require | Notes |
+|---|---|---|
+| `SafeMemoize::Stores::Base` | auto | Abstract base — subclass to build custom adapters; exposes `MISS` sentinel |
+| `SafeMemoize::Stores::Memory` | auto | Built-in in-process store; reference implementation |
+| `SafeMemoize::Stores::Redis` | `"safe_memoize/stores/redis"` | Redis-backed adapter; Marshal serialization; `PX` TTL |
+| `SafeMemoize::Stores::RailsCache` | `"safe_memoize/stores/rails_cache"` | `ActiveSupport::Cache::Store` wrapper |
 
 ### Opt-in extensions (not guaranteed until their owning milestone ships)
 
-The following are available now but reside under `require "safe_memoize/rails"` and are not covered by the v1.0.0 semver guarantee until the v1.x milestone that owns them is declared stable:
+The following are available now but reside under `require "safe_memoize/rails"` and are not covered by the semver guarantee until the v1.x milestone that owns them is declared stable:
 
 - `SafeMemoize::Rails` module (`track`, `reset_tracked!`)
 - `SafeMemoize::Rails::RequestScoped` concern
