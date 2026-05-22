@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module SafeMemoize
+  # @api private
   module HooksMethods
     NOTIFICATION_EVENT_NAMES = {
       on_hit: "cache_hit.safe_memoize",

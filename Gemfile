@@ -14,3 +14,6 @@ gem "standard", "~> 1.3"
 
 # Benchmarking
 gem "benchmark-ips", "~> 2.13", require: false
+
+# Documentation
+gem "yard", "~> 0.9", require: false
