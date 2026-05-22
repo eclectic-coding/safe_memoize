@@ -60,5 +60,5 @@ jobs:
         if: matrix.ruby == '3.4'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage/.resultset.json
+          files: coverage/coverage.json
 
