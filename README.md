@@ -55,6 +55,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [`ArgumentError` at definition time when memoizing an undefined method](#basic-memoization)
 - [Hook error isolation — hook exceptions never propagate to callers](#lifecycle-hooks)
 - [Deprecation infrastructure for gem authors](#deprecation)
+- [Optional `ActiveSupport::Notifications` integration for Rails observability](#activesupportnotifications)
 - [Batch cache warm-up via `memo_preload`](#cache-warm-up-and-persistence)
 - [`on_memo_store` hook fires on every cache write](#lifecycle-hooks)
 - [Global default TTL and max size via `SafeMemoize.configure`](#global-configuration)
@@ -662,7 +663,47 @@ Both settings apply at definition time — methods already memoized before `conf
 SafeMemoize.reset_configuration!
 ```
 
-The configure block also accepts `on_hook_error` and `on_deprecation` handlers (covered in [Hook error isolation](#hook-error-isolation) and [Deprecation](#deprecation)).
+The configure block also accepts `on_hook_error`, `on_deprecation`, and `active_support_notifications` handlers (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), and [ActiveSupport::Notifications](#activesupportnotifications)).
+
+### ActiveSupport::Notifications
+
+Enable opt-in integration with `ActiveSupport::Notifications` for Rails and other ActiveSupport-based stacks:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.active_support_notifications = true
+end
+```
+
+Once enabled, SafeMemoize emits the following events through the standard notification pipeline:
+
+| Event | Fires when |
+|---|---|
+| `cache_hit.safe_memoize` | A cached value is returned |
+| `cache_miss.safe_memoize` | The method is called and no cached value exists |
+| `cache_store.safe_memoize` | A value is written to the cache (miss, `warm_memo`, or `load_memo`) |
+| `cache_evict.safe_memoize` | An entry is removed via `reset_memo`, `reset_all_memos`, or LRU eviction |
+| `cache_expire.safe_memoize` | An expired TTL entry is pruned |
+
+Each event payload includes:
+
+```ruby
+{
+  method: :method_name,   # Symbol
+  key:    cache_key,      # Array — the full cache key
+  class:  "ClassName"     # String — the host class name
+}
+```
+
+Subscribe to all SafeMemoize events via the standard ActiveSupport pattern:
+
+```ruby
+ActiveSupport::Notifications.subscribe(/\.safe_memoize$/) do |event|
+  Rails.logger.debug("[cache] #{event.name} #{event.payload[:class]}##{event.payload[:method]}")
+end
+```
+
+The integration is a no-op when ActiveSupport is not loaded — there is no overhead for non-Rails projects. `active_support_notifications` defaults to `false`.
 
 ### Deprecation
 
