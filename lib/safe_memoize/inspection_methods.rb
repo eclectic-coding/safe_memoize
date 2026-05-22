@@ -14,7 +14,7 @@ module SafeMemoize
       if args.empty? && kwargs.empty?
         ->(key) { key[0] == method_name }
       else
-        cache_key = safe_memo_cache_key(method_name, args, kwargs)
+        cache_key = compute_cache_key(method_name, args, kwargs)
         ->(key) { key == cache_key }
       end
     end

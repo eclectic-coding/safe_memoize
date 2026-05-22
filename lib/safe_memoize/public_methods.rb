@@ -5,7 +5,7 @@ module SafeMemoize
     def memoized?(method_name, *args, **kwargs, &block)
       return false if block
 
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+      cache_key = compute_cache_key(method_name, args, kwargs)
 
       with_memo_lock do
         memo_cache_hit?(cache_key)
@@ -13,7 +13,7 @@ module SafeMemoize
     end
 
     def memo_ttl_remaining(method_name, *args, **kwargs)
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+      cache_key = compute_cache_key(method_name, args, kwargs)
 
       with_memo_lock do
         record = memo_cache_record(cache_key)
@@ -139,7 +139,7 @@ module SafeMemoize
 
     def memo_touch(method_name, *args, ttl: nil, **kwargs)
       method_name = method_name.to_sym
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+      cache_key = compute_cache_key(method_name, args, kwargs)
 
       with_memo_lock do
         cache = memo_cache_or_nil
@@ -169,7 +169,7 @@ module SafeMemoize
     end
 
     def memo_age(method_name, *args, **kwargs)
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+      cache_key = compute_cache_key(method_name, args, kwargs)
 
       with_memo_lock do
         record = memo_cache_record(cache_key)
@@ -183,7 +183,7 @@ module SafeMemoize
     end
 
     def memo_stale?(method_name, *args, **kwargs)
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+      cache_key = compute_cache_key(method_name, args, kwargs)
 
       with_memo_lock do
         cache = memo_cache_or_nil
