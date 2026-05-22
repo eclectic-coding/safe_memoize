@@ -12,6 +12,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 - Ractor compatibility audit — `spec/ractor_spec.rb` documents the specific failure modes (non-shareable closures in `define_method` blocks, `Ractor::IsolationError` on `SafeMemoize.configuration`); README section explains the limitation and the Thread-based workaround
 - Semantic versioning guarantee — README `## Public API and versioning guarantee` section enumerates every public constant, method, option key, and `Configuration` attribute covered by semver from v1.0.0 onwards; opt-in extensions (`SafeMemoize::Rails`, `SafeMemoize::Adapters::*`) are explicitly called out as not yet covered until their owning milestone ships
+- Ruby version policy — README `## Ruby version support` section formalises the supported version window (Ruby ≥ 3.3; current stable plus two previous non-EOL minors), the cadence for dropping EOL versions (minor release only, never a patch), and a history table of dropped versions; CI matrix documents covered versions with their EOL dates
 - Complete RBS + Sorbet signatures — `sig/safe_memoize.rbs` corrected: `SafeMemoize::Adapters::StatsD` added; `memo_count`, `memo_keys`, `memo_values` fixed from rest-arg to proper optional single arg; `clear_memo_hooks` and `clear_custom_keys` optional-arg annotations corrected; `warm_memo` block marked optional; new `rbi/safe_memoize.rbi` ships Sorbet stubs covering the full public API, all `Configuration` attributes, adapters, and opt-in Rails helpers
 
 ## [0.9.0] - 2026-05-22
