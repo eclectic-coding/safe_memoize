@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-22
+
 ### Added
 
 - `SafeMemoize::Stores::Base` — abstract adapter base class defining the cache store contract: `read(key)`, `write(key, value, expires_in: nil)`, `delete(key)`, `clear`, `keys`, and `exist?(key)`; a frozen `MISS` sentinel on `Base` distinguishes cache misses from cached `nil` or `false` values; `exist?` has a default implementation that delegates to `read`
