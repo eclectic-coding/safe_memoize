@@ -13,6 +13,8 @@ module SafeMemoize
         @app = app
       end
 
+      # @param env [Hash] Rack environment
+      # @return [Array] Rack response triplet
       def call(env)
         @app.call(env)
       ensure

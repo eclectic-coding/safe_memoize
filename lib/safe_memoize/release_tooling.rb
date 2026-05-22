@@ -3,6 +3,7 @@
 require "date"
 
 module SafeMemoize
+  # @api private
   module ReleaseTooling
     module_function
 

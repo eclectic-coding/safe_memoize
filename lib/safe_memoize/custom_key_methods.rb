@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module SafeMemoize
+  # @api private
   module CustomKeyMethods
     private
 

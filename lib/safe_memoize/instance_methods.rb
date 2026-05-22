@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module SafeMemoize
+  # @api private
   module InstanceMethods
     include PublicMethods
     include CacheStoreMethods

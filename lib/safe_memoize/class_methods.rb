@@ -1,7 +1,43 @@
 # frozen_string_literal: true
 
 module SafeMemoize
+  # Class-level DSL added to any class that does +prepend SafeMemoize+.
   module ClassMethods
+    # Wraps an existing instance method with a thread-safe per-instance cache.
+    #
+    # Must be called *after* the method is defined. Raises +ArgumentError+ immediately
+    # at class-definition time if no such method exists.
+    #
+    # @param method_name [Symbol, String] name of the instance method to memoize
+    # @param ttl [Numeric, nil] seconds until the cached value expires; +nil+ means
+    #   the entry never expires. Falls back to {Configuration#default_ttl} when +nil+.
+    # @param max_size [Integer, nil] maximum number of cached entries per instance
+    #   for this method; the least-recently-used entry is evicted when the limit is
+    #   reached. Falls back to {Configuration#default_max_size} when +nil+.
+    # @param ttl_refresh [Boolean] when +true+, every cache *hit* resets the expiry
+    #   clock (sliding-window TTL). Requires +ttl:+ to be set.
+    # @param if [Proc, nil] callable predicate; the result is cached only when the
+    #   predicate returns truthy. Receives the computed return value as its argument.
+    # @param unless [Proc, nil] inverse of +:if+; the result is *not* cached when the
+    #   predicate returns truthy.
+    # @param shared [Boolean] when +true+, results are stored on the class rather than
+    #   per instance — all instances share one cache.
+    # @param key [Proc, nil] class-level custom cache key generator. Receives the same
+    #   arguments as the method and should return a single comparable value. Instance-level
+    #   keys set via {PublicCustomKeyMethods#memoize_with_custom_key} take priority.
+    # @return [void]
+    # @raise [ArgumentError] if the method does not exist, or option values are invalid
+    #
+    # @example Zero-argument method
+    #   def expensive_query = db.run("SELECT …")
+    #   memoize :expensive_query
+    #
+    # @example With TTL and LRU cap
+    #   def fetch(id) = http_get(id)
+    #   memoize :fetch, ttl: 60, max_size: 500
+    #
+    # @example Conditional — only cache successful responses
+    #   memoize :fetch, if: ->(v) { v[:status] == 200 }
     def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil)
       method_name = method_name.to_sym
 
@@ -196,6 +232,45 @@ module SafeMemoize
       prepend mod
     end
 
+    # Memoizes every eligible public instance method defined directly on the class.
+    #
+    # Accepts all options that {#memoize} accepts, plus +:except:+ and +:only:+.
+    # Raises +ArgumentError+ when both +:only:+ and +:except:+ are given.
+    #
+    # @param except [Array<Symbol, String>] method names to skip
+    # @param only [Array<Symbol, String>] when non-empty, only these methods are memoized
+    # @param include_protected [Boolean] also memoize +protected+ methods
+    # @param include_private [Boolean] also memoize +private+ methods
+    # @param options [Hash] any additional options forwarded to {#memoize}
+    # @return [void]
+    # @raise [ArgumentError] if both +:only:+ and +:except:+ are given
+    def memoize_all(except: [], only: [], include_protected: false, include_private: false, **options)
+      raise ArgumentError, "cannot specify both :only and :except" if only.any? && except.any?
+
+      excluded = Array(except).map(&:to_sym)
+      included = Array(only).map(&:to_sym)
+
+      methods = public_instance_methods(false)
+      methods |= protected_instance_methods(false) if include_protected
+      methods |= private_instance_methods(false) if include_private
+
+      methods.each do |method_name|
+        next if excluded.include?(method_name)
+        next if included.any? && !included.include?(method_name)
+
+        memoize(method_name, **options)
+      end
+    end
+
+    # Clears one or all entries from the class-level shared cache.
+    #
+    # With no positional args after +method_name+, clears *all* shared entries for
+    # that method. With args/kwargs, clears only the matching entry.
+    #
+    # @param method_name [Symbol, String] the memoized method
+    # @param args [Array] positional arguments identifying the entry to clear
+    # @param kwargs [Hash] keyword arguments identifying the entry to clear
+    # @return [void]
     def reset_shared_memo(method_name, *args, **kwargs)
       method_name = method_name.to_sym
       specific_key = (args.empty? && kwargs.empty?) ? nil : [method_name, args, kwargs]
@@ -211,6 +286,8 @@ module SafeMemoize
       end
     end
 
+    # Clears the entire class-level shared cache for this class.
+    # @return [void]
     def reset_all_shared_memos
       __safe_memo_shared_mutex__.synchronize do
         @__safe_memo_shared_cache__ = {}
@@ -218,6 +295,12 @@ module SafeMemoize
       end
     end
 
+    # Returns +true+ if a live shared cache entry exists for the given call signature.
+    #
+    # @param method_name [Symbol, String]
+    # @param args [Array] positional arguments
+    # @param kwargs [Hash] keyword arguments
+    # @return [Boolean]
     def shared_memoized?(method_name, *args, **kwargs)
       method_name = method_name.to_sym
       cache_key = [method_name, args, kwargs]
@@ -233,6 +316,11 @@ module SafeMemoize
       end
     end
 
+    # Returns the number of live entries in the class-level shared cache.
+    #
+    # @param method_name [Symbol, String, nil] when given, counts only entries for
+    #   that method; when +nil+, counts all methods.
+    # @return [Integer]
     def shared_memo_count(method_name = nil)
       __safe_memo_shared_mutex__.synchronize do
         cache = @__safe_memo_shared_cache__ || {}
@@ -242,6 +330,13 @@ module SafeMemoize
       end
     end
 
+    # Returns how many seconds ago the shared entry was cached, or +nil+ if not cached
+    # or already expired.
+    #
+    # @param method_name [Symbol, String]
+    # @param args [Array]
+    # @param kwargs [Hash]
+    # @return [Float, nil]
     def shared_memo_age(method_name, *args, **kwargs)
       method_name = method_name.to_sym
       cache_key = [method_name, args, kwargs]
@@ -263,6 +358,12 @@ module SafeMemoize
       end
     end
 
+    # Returns +true+ if the shared entry exists but its TTL has elapsed.
+    #
+    # @param method_name [Symbol, String]
+    # @param args [Array]
+    # @param kwargs [Hash]
+    # @return [Boolean]
     def shared_memo_stale?(method_name, *args, **kwargs)
       method_name = method_name.to_sym
       cache_key = [method_name, args, kwargs]
@@ -278,24 +379,6 @@ module SafeMemoize
         return false unless expires_at
 
         expires_at <= Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      end
-    end
-
-    def memoize_all(except: [], only: [], include_protected: false, include_private: false, **options)
-      raise ArgumentError, "cannot specify both :only and :except" if only.any? && except.any?
-
-      excluded = Array(except).map(&:to_sym)
-      included = Array(only).map(&:to_sym)
-
-      methods = public_instance_methods(false)
-      methods |= protected_instance_methods(false) if include_protected
-      methods |= private_instance_methods(false) if include_private
-
-      methods.each do |method_name|
-        next if excluded.include?(method_name)
-        next if included.any? && !included.include?(method_name)
-
-        memoize(method_name, **options)
       end
     end
 

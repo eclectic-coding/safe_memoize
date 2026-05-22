@@ -1,7 +1,13 @@
 # frozen_string_literal: true
 
 module SafeMemoize
+  # Per-instance cache metrics: hit/miss counts and average computation time.
   module PublicMetricsMethods
+    # Returns aggregate metrics across all memoized methods on this instance.
+    #
+    # @return [Hash] with keys +:total_hits+, +:total_misses+, +:hit_rate+,
+    #   +:miss_rate+, +:average_computation_time+, and +:entries+ (one entry
+    #   per cached argument combination)
     def cache_stats
       with_memo_lock do
         metrics = memo_metrics_store
@@ -11,6 +17,11 @@ module SafeMemoize
       end
     end
 
+    # Returns metrics for a single memoized method.
+    #
+    # @param method_name [Symbol, String]
+    # @return [Hash] same shape as {#cache_stats} but scoped to one method,
+    #   with an extra +:method+ key
     def cache_stats_for(method_name)
       method_name = method_name.to_sym
 
@@ -22,14 +33,23 @@ module SafeMemoize
       end
     end
 
+    # Returns the overall cache hit rate as a percentage (0.0–100.0).
+    # @return [Float]
     def cache_hit_rate
       cache_stats[:hit_rate]
     end
 
+    # Returns the overall cache miss rate as a percentage (0.0–100.0).
+    # @return [Float]
     def cache_miss_rate
       cache_stats[:miss_rate]
     end
 
+    # Resets hit/miss counters, either for one method or for all methods.
+    #
+    # @param method_name [Symbol, String, nil] when given, resets only that method's
+    #   metrics; when +nil+, resets all
+    # @return [void]
     def cache_metrics_reset(method_name = nil)
       with_memo_lock do
         if method_name

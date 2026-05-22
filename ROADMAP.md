@@ -12,7 +12,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 |---|---|---|
 | Semantic versioning guarantee | Document which constants, methods, and option keys are public API; breaking changes require a major bump henceforth | Shipped |
 | Complete RBS + Sorbet signatures | Cover all public methods including overloads for optional keyword arguments; publish `.rbi` stubs as a companion package if demand warrants | Shipped |
-| Full API reference | Generated documentation hosted on RubyDoc or a dedicated docs site; all public methods documented with parameter types, return values, and usage examples | Planned |
+| Full API reference | Generated documentation hosted on RubyDoc or a dedicated docs site; all public methods documented with parameter types, return values, and usage examples | Shipped |
 | Ractor compatibility audit | Investigate and either support Ractor-compatible operation (Mutex replacement, shared-cache storage) or document the limitation clearly | Shipped |
 | Ruby version policy | Formalise the supported Ruby version window and cadence for dropping EOL versions | Shipped |
 | Deprecation sweep | Resolve or formally deprecate any unstable internal APIs before the stable release | Shipped |

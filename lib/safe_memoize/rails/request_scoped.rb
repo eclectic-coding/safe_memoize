@@ -25,10 +25,13 @@ module SafeMemoize
     #     end
     #   end
     module RequestScoped
+      # @api private
       def self.included(base)
         base.after_action :reset_all_memos if base.respond_to?(:after_action)
       end
 
+      # Resets all memoized values on this instance. Delegates to {PublicMethods#reset_all_memos}.
+      # @return [void]
       def reset_request_memos
         reset_all_memos
       end
