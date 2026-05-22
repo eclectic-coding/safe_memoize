@@ -3,9 +3,13 @@
 require "simplecov"
 SimpleCov.start do
   add_filter "/spec/"
+  add_filter "/version.rb"
+  track_files "lib/**/*.rb"
 end
 
 require "safe_memoize"
+require "safe_memoize/stores/redis"
+require "safe_memoize/stores/rails_cache"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

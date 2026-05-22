@@ -68,6 +68,12 @@ RSpec.describe SafeMemoize::Stores::Redis do
       expect(store.read(:missing)).to be miss
     end
 
+    it "returns MISS when stored bytes cannot be deserialized" do
+      rk = store.send(:redis_key, :corrupted)
+      fake_redis.instance_variable_get(:@store)[rk] = "not valid marshal data"
+      expect(store.read(:corrupted)).to be miss
+    end
+
     it "returns a stored value" do
       store.write(:key, "hello")
       expect(store.read(:key)).to eq "hello"

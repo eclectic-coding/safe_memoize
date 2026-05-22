@@ -293,6 +293,8 @@ RSpec.describe "SafeMemoize thread safety" do
     end
 
     it "hook exceptions do not corrupt concurrent execution" do
+      SafeMemoize.configure { |c| c.on_hook_error = ->(*) {} }
+
       klass = Class.new do
         prepend SafeMemoize
 
@@ -305,6 +307,8 @@ RSpec.describe "SafeMemoize thread safety" do
       obj.data  # prime
 
       expect { barrier_run { obj.data } }.not_to raise_error
+    ensure
+      SafeMemoize.reset_configuration!
     end
   end
 

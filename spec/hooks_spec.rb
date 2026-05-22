@@ -537,6 +537,7 @@ RSpec.describe SafeMemoize do
       end
 
       it "does not propagate hook exceptions to the caller" do
+        SafeMemoize.configure { |c| c.on_hook_error = ->(*) {} }
         obj = klass.new
         obj.on_memo_hit { raise "hook exploded" }
         obj.value

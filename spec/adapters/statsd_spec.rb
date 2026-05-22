@@ -115,8 +115,7 @@ RSpec.describe SafeMemoize::Adapters::StatsD do
 
     it "emits a warning and does not raise when increment fails" do
       allow(client).to receive(:increment).and_raise(RuntimeError, "connection refused")
-      expect { klass.new.fetch(1) }.not_to raise_error
-      expect { klass.new.fetch(1) }.not_to raise_error
+      expect { klass.new.fetch(1) }.to output(/StatsD dispatch error/).to_stderr
     end
 
     context "with shared: true memoization" do

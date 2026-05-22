@@ -94,9 +94,7 @@ module SafeMemoize
       raise ArgumentError, ":key must be callable" if key && !key.respond_to?(:call)
 
       if store
-        unless store.is_a?(SafeMemoize::Stores::Base)
-          raise ArgumentError, "store: must be a SafeMemoize::Stores::Base instance (got #{store.class})"
-        end
+        raise ArgumentError, "store: must be a SafeMemoize::Stores::Base instance (got #{store.class})" unless store.is_a?(SafeMemoize::Stores::Base)
         raise ArgumentError, "max_size: is not supported with store: — use the store adapter's own eviction" if max_size
         raise ArgumentError, "shared: and store: cannot be combined" if shared
       end
