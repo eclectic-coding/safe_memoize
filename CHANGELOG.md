@@ -11,6 +11,7 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 ### Added
 
 - Ractor compatibility audit — `spec/ractor_spec.rb` documents the specific failure modes (non-shareable closures in `define_method` blocks, `Ractor::IsolationError` on `SafeMemoize.configuration`); README section explains the limitation and the Thread-based workaround
+- Semantic versioning guarantee — README `## Public API and versioning guarantee` section enumerates every public constant, method, option key, and `Configuration` attribute covered by semver from v1.0.0 onwards; opt-in extensions (`SafeMemoize::Rails`, `SafeMemoize::Adapters::*`) are explicitly called out as not yet covered until their owning milestone ships
 
 ## [0.9.0] - 2026-05-22
 
