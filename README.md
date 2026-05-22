@@ -55,6 +55,14 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [`ArgumentError` at definition time when memoizing an undefined method](#basic-memoization)
 - [Hook error isolation — hook exceptions never propagate to callers](#lifecycle-hooks)
 - [Deprecation infrastructure for gem authors](#deprecation)
+- [Batch cache warm-up via `memo_preload`](#cache-warm-up-and-persistence)
+- [`on_memo_store` hook fires on every cache write](#lifecycle-hooks)
+- [Global default TTL and max size via `SafeMemoize.configure`](#global-configuration)
+- [`memo_touch` resets the expiry clock without recomputing](#ttl-expiration)
+- [`memo_refresh` force-recomputes and re-caches in one call](#cache-inspection)
+- [`memo_age` and `memo_stale?` for TTL introspection](#cache-inspection)
+- [Class-level `key:` option for shared cache key generation](#custom-cache-keys)
+- [`shared_memo_age` and `shared_memo_stale?` for shared cache TTL inspection](#shared-cache)
 
 ## Installation
 
@@ -196,6 +204,14 @@ obj.on_memo_expire do |cache_key, record|
 end
 ```
 
+**`on_memo_store`** fires whenever a value is written to the cache — on a miss, via `warm_memo`, or via `load_memo`:
+
+```ruby
+obj.on_memo_store do |cache_key, record|
+  Rails.logger.debug("Stored #{cache_key[0]}: #{record[:value].inspect}")
+end
+```
+
 Multiple hooks of the same type can be registered and all will fire. Remove them with `clear_memo_hooks`:
 
 ```ruby
@@ -242,6 +258,21 @@ end
 ```
 
 With a TTL, cached values expire automatically after the given number of seconds. The next call recomputes and refreshes the cache.
+
+Use `memo_touch` to reset the expiry clock on a cached entry without recomputing its value:
+
+```ruby
+obj.memo_touch(:current_quote)               # Resets TTL to the original duration
+obj.memo_touch(:current_quote, ttl: 120)     # Resets TTL to a new duration
+# => true on success, false if the entry is not cached or already expired
+```
+
+Use `memo_refresh` to force-recompute a cached entry immediately and store the new value:
+
+```ruby
+obj.memo_refresh(:current_quote)             # Recomputes and re-caches
+obj.memo_refresh(:find, 42)                  # Recomputes for one argument combination
+```
 
 ### Sliding window TTL
 
@@ -329,6 +360,21 @@ memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 
 ### Cache warm-up and persistence
 
+#### Batch warm-up via `memo_preload`
+
+Use `memo_preload` to warm multiple argument combinations in one call. It calls the memoized method for each argument set, caches all results, and returns them in input order:
+
+```ruby
+obj.memo_preload(:find, [1], [2], [3])
+# => [<User id=1>, <User id=2>, <User id=3>]
+```
+
+Each element is a separate argument list passed to the method, so keyword arguments work too:
+
+```ruby
+obj.memo_preload(:search, ["ruby"], ["rails"], ["rspec"])
+```
+
 #### Warming individual entries
 
 Use `warm_memo` to pre-populate a cache entry without calling the method. The block provides the value:
@@ -410,6 +456,8 @@ ConfigService.shared_memoized?(:database_url)         # => true
 ConfigService.shared_memoized?(:find, user_id)        # Checks one argument combination
 ConfigService.shared_memo_count                       # Total shared cached entries
 ConfigService.shared_memo_count(:find)                # Entries for one method
+ConfigService.shared_memo_age(:feature_flags)         # => 42.1  (seconds since cached)
+ConfigService.shared_memo_stale?(:feature_flags)      # => false (TTL not yet elapsed)
 ```
 
 `shared: true` supports `ttl:`, `ttl_refresh:`, `if:`, `unless:`, and `max_size:` options.
@@ -480,7 +528,7 @@ Inherited methods are never affected regardless of visibility.
 
 ### Custom cache keys
 
-By default the cache key is derived from the method name and all arguments. Use `memoize_with_custom_key` on an instance to control exactly what makes two calls equivalent:
+By default the cache key is derived from the method name and all arguments. Use the `key:` option on `memoize` to set a class-level key generator that applies to every instance:
 
 ```ruby
 class ReportService
@@ -489,9 +537,18 @@ class ReportService
   def generate(user_id, options)
     build_report(user_id, options)
   end
-  memoize :generate
+  memoize :generate, key: ->(user_id, _options) { user_id }
 end
 
+# All instances share the same key logic — calls with the same user_id share one cache entry
+svc = ReportService.new
+svc.generate(42, {format: :pdf})  # computes and caches under key 42
+svc.generate(42, {format: :csv})  # cache hit — same key
+```
+
+For per-instance key overrides, use `memoize_with_custom_key` on an instance (takes priority over the class-level `key:` option):
+
+```ruby
 svc = ReportService.new
 
 # Cache only by user_id — ignore the options hash entirely
@@ -536,6 +593,10 @@ obj.memo_values(:search)                  # Cached signatures and values for one
 obj.memo_ttl_remaining(:current_quote)           # => 47.231 (seconds until expiry)
 obj.memo_ttl_remaining(:current_user)            # => nil    (no TTL set)
 obj.memo_ttl_remaining(:find, 42)                # => 0      (not cached or already expired)
+
+obj.memo_age(:current_quote)                     # => 12.8   (seconds since cached; nil if not cached)
+obj.memo_stale?(:current_quote)                  # => false  (cached but TTL not yet elapsed)
+obj.memo_stale?(:current_user)                   # => false  (no TTL — never stale)
 ```
 
 `memo_inspect` returns all metadata for one cached entry in a single mutex-held read:
@@ -575,13 +636,33 @@ obj.cache_stats
 #      ]
 #    }
 
-obj.cache_stats_for(:find)   # Stats scoped to one method
-obj.cache_hit_rate           # => 84.0  (percentage)
-obj.cache_miss_rate          # => 16.0  (percentage)
-obj.cache_metrics_reset      # Clears all collected metrics
+obj.cache_stats_for(:find)        # Stats scoped to one method
+obj.cache_hit_rate                # => 84.0  (percentage)
+obj.cache_miss_rate               # => 16.0  (percentage)
+obj.cache_metrics_reset           # Clears all collected metrics
+obj.cache_metrics_reset(:find)    # Clears metrics for one method only
 ```
 
 Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
+
+### Global configuration
+
+Use `SafeMemoize.configure` to set defaults that apply to all subsequently memoized methods. Per-call options always take precedence over global defaults.
+
+```ruby
+SafeMemoize.configure do |c|
+  c.default_ttl      = 300   # All memoized methods expire after 5 minutes unless overridden
+  c.default_max_size = 100   # All memoized methods cap at 100 entries unless overridden
+end
+```
+
+Both settings apply at definition time — methods already memoized before `configure` is called are not affected. Reset all defaults back to `nil` with:
+
+```ruby
+SafeMemoize.reset_configuration!
+```
+
+The configure block also accepts `on_hook_error` and `on_deprecation` handlers (covered in [Hook error isolation](#hook-error-isolation) and [Deprecation](#deprecation)).
 
 ### Deprecation
 
@@ -611,8 +692,6 @@ SafeMemoize.configure do |c|
   c.on_deprecation = ->(msg) { raise msg }
 end
 ```
-
-Call `SafeMemoize.reset_configuration!` to restore all global defaults.
 
 ## Development
 
