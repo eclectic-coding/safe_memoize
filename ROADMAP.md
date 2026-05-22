@@ -14,7 +14,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 | `store:` option on `memoize` | Accept any store adapter object; defaults to the existing in-process hash store | Shipped |
 | Redis adapter | Reference implementation (`SafeMemoize::Stores::Redis`) with TTL, LRU-like expiry, and serialization handled transparently | Shipped |
 | Rails.cache adapter | Thin wrapper around `ActiveSupport::Cache::Store` for projects already using a configured Rails cache | Shipped |
-| Global default store | Set via `SafeMemoize.configure` — applies a default store to every memoized method without per-call configuration | Planned |
+| Global default store | Set via `SafeMemoize.configure` — applies a default store to every memoized method without per-call configuration | Shipped |
 
 ---
 
