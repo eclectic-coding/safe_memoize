@@ -57,6 +57,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Deprecation infrastructure for gem authors](#deprecation)
 - [Optional `ActiveSupport::Notifications` integration for Rails observability](#activesupportnotifications)
 - [Optional StatsD adapter for metrics pipelines](#statsd)
+- [Rails request-scope helpers for controllers and service objects](#rails-request-scope)
 - [Batch cache warm-up via `memo_preload`](#cache-warm-up-and-persistence)
 - [`on_memo_store` hook fires on every cache write](#lifecycle-hooks)
 - [Global default TTL and max size via `SafeMemoize.configure`](#global-configuration)
@@ -765,6 +766,75 @@ SafeMemoize then calls `client.increment(metric, tags: [...])` on every cache ev
 Each call includes two tags: `method:method_name` and `class:ClassName`. The client must respond to `increment(metric, tags: [...])` — the interface used by `dogstatsd-ruby`, `statsd-instrument`, and most modern StatsD clients.
 
 If the client raises, the error is rescued and a warning is emitted to stderr rather than propagated to the caller. `statsd_client` defaults to `nil` (disabled).
+
+[↑ Back to features](#features)
+
+### Rails request-scope
+
+SafeMemoize ships optional Rails integration as a separate require (zero overhead in non-Rails apps):
+
+```ruby
+require "safe_memoize/rails"
+```
+
+#### Controller concern
+
+Include `SafeMemoize::Rails::RequestScoped` in any Rails controller that also `prepend SafeMemoize`. It automatically registers `after_action :reset_all_memos` so every instance memo is cleared at the end of each request — preventing state from leaking between requests when the controller object is reused:
+
+```ruby
+class ApplicationController < ActionController::Base
+  prepend SafeMemoize
+  include SafeMemoize::Rails::RequestScoped
+
+  memoize :current_user
+end
+```
+
+#### Service objects and non-controller classes
+
+In plain classes (service objects, Active Model objects), include `RequestScoped` to gain `reset_request_memos` and call it manually at the appropriate point:
+
+```ruby
+class ReportService
+  prepend SafeMemoize
+  include SafeMemoize::Rails::RequestScoped
+
+  def summary(id)
+    # ...
+  end
+  memoize :summary
+end
+
+svc = ReportService.new
+svc.summary(1)
+svc.reset_request_memos  # clears all instance memos
+```
+
+#### Middleware for tracked instances
+
+For service objects that should be reset automatically at request boundaries, use the Rack middleware together with `SafeMemoize::Rails.track`:
+
+```ruby
+# config/application.rb
+config.middleware.use SafeMemoize::Rails::Middleware
+```
+
+```ruby
+class ReportService
+  prepend SafeMemoize
+
+  def initialize
+    SafeMemoize::Rails.track(self)  # register for auto-reset
+  end
+
+  def summary(id)
+    # ...
+  end
+  memoize :summary
+end
+```
+
+`SafeMemoize::Rails::Middleware` calls `reset_all_memos` on every tracked instance in the current thread at the end of the request, even if the app raises. Tracking is thread-local, so concurrent requests never interfere. The tracked list is cleared automatically after each reset.
 
 [↑ Back to features](#features)
 
