@@ -895,6 +895,18 @@ end
 
 [↑ Back to features](#features)
 
+## Ractor compatibility
+
+SafeMemoize is **not Ractor-compatible** in its current form. Passing a class that uses `memoize` into a `Ractor.new` block raises `RuntimeError: defined with an un-shareable Proc in a different Ractor`. There are two root causes:
+
+1. **Non-shareable closures.** `ClassMethods#memoize` builds anonymous modules using `define_method` with blocks that close over local variables (`ttl`, `max_size`, `condition`, `shared_mutex`, …). Ruby marks those Procs as non-Ractor-shareable, so the host class cannot be sent to a Ractor.
+
+2. **Mutable module-level state.** `SafeMemoize.configuration` reads `@configuration` from the `SafeMemoize` module — a mutable ivar on a shared constant — which raises `Ractor::IsolationError` from a non-main Ractor. This affects every memoized call because hooks and adapters always read the configuration.
+
+**Workaround:** Use Ruby Threads instead of Ractors — SafeMemoize is fully thread-safe via double-check locking and per-instance Mutexes. If you need true parallelism with Ractors, perform computation inside the Ractor without memoization and send frozen results back via `Ractor#send`.
+
+Ractor support is tracked in the v1.0.0 roadmap. The fix would require replacing closed-over variables with frozen shareable bindings and making `Configuration` a frozen value object, which is a significant redesign.
+
 ## Development
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `bundle exec rspec` to run the tests. You can also run `bin/console` for an interactive prompt.
