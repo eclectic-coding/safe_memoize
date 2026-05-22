@@ -8,6 +8,21 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- `SafeMemoize::Stores::Base` — abstract adapter base class defining the cache store contract: `read(key)`, `write(key, value, expires_in: nil)`, `delete(key)`, `clear`, `keys`, and `exist?(key)`; a frozen `MISS` sentinel on `Base` distinguishes cache misses from cached `nil` or `false` values; `exist?` has a default implementation that delegates to `read`
+- `SafeMemoize::Stores::Memory` — built-in in-process store that wraps a plain `Hash` behind a `Mutex`; supports per-entry TTL via `expires_in:` with lazy expiry on read; serves as both the default store and the reference implementation for custom adapters
+- `Configuration#default_store` — set via `SafeMemoize.configure { |c| c.default_store = MyStore.new }` to route every `memoize` call that has no explicit `store:` through the given adapter; methods using `max_size:` or `shared:` are incompatible and fall back silently to the per-instance hash; an invalid value raises `ArgumentError` at `memoize` time; cleared by `reset_configuration!`
+- `SafeMemoize::Stores::RailsCache` — opt-in adapter (`require "safe_memoize/stores/rails_cache"`) wrapping any `ActiveSupport::Cache::Store` (including `Rails.cache`); values are wrapped in a sentinel envelope so cached `nil`/`false` are distinguished from a cache miss; TTL forwarded as `expires_in:` for native store expiry; `clear` uses `delete_matched` scoped to the namespace; `keys` returns `[]` (AS::Cache has no enumeration API)
+- `SafeMemoize::Stores::Redis` — opt-in adapter (`require "safe_memoize/stores/redis"`) backed by any Redis-compatible client responding to `#get`, `#set`, `#del`, and `#scan_each`; values and keys are serialized with Marshal + `pack("m0")`; TTL is forwarded as `PX` (milliseconds, rounded up) for sub-second precision; `clear` uses `SCAN` to avoid blocking; all entries are namespaced (default: `"safe_memoize"`) so multiple stores or applications can share one Redis instance
+- `store:` option on `memoize` — accepts any `Stores::Base` subclass instance; routes all reads and writes through the adapter's `read`/`write` interface; the store is shared across all instances of the class; `ttl:` is forwarded as `expires_in:` to `write`, `ttl_refresh:` re-writes on every hit, and `if:`/`unless:` conditional storage is enforced at the SafeMemoize layer; raises `ArgumentError` if combined with `max_size:` (LRU belongs in the adapter) or `shared:`
+
+### Changed
+
+- Test suite achieves 100% line coverage — `spec_helper` now requires opt-in store adapters (`Stores::Redis`, `Stores::RailsCache`) after `SimpleCov.start` so Coverage tracks them; `Rakefile` runs `spec/stores/` before other specs to prevent Ruby 3.4 Coverage counter disruption from Ractor/concurrency tests; `version.rb` excluded from coverage reporting
+- `store:` type guard in `ClassMethods#memoize` collapsed to an inline guard clause so Ruby's Coverage module counts the raise correctly
+- Hook-error isolation tests (`concurrency_spec`, `hooks_spec`) now configure `on_hook_error = ->(*) {}` to silence expected stderr warnings rather than leaking them into test output; StatsD error-resilience test asserts on the emitted warning with `expect { }.to output(...).to_stderr`
+
 ## [1.0.0] - 2026-05-22
 
 ### Added

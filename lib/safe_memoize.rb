@@ -2,6 +2,8 @@
 
 require_relative "safe_memoize/version"
 require_relative "safe_memoize/configuration"
+require_relative "safe_memoize/stores/base"
+require_relative "safe_memoize/stores/memory"
 require_relative "safe_memoize/adapters/statsd"
 require_relative "safe_memoize/adapters/opentelemetry"
 require_relative "safe_memoize/class_methods"

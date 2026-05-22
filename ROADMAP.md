@@ -10,11 +10,11 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 | Feature | Description | Status |
 |---|---|---|
-| Cache store adapter interface | Define a minimal read/write/delete/clear/keys contract that external backends must implement | Planned |
-| `store:` option on `memoize` | Accept any store adapter object; defaults to the existing in-process hash store | Planned |
-| Redis adapter | Reference implementation (`SafeMemoize::Stores::Redis`) with TTL, LRU-like expiry, and serialization handled transparently | Planned |
-| Rails.cache adapter | Thin wrapper around `ActiveSupport::Cache::Store` for projects already using a configured Rails cache | Planned |
-| Global default store | Set via `SafeMemoize.configure` — applies a default store to every memoized method without per-call configuration | Planned |
+| Cache store adapter interface | Define a minimal read/write/delete/clear/keys contract that external backends must implement | Shipped |
+| `store:` option on `memoize` | Accept any store adapter object; defaults to the existing in-process hash store | Shipped |
+| Redis adapter | Reference implementation (`SafeMemoize::Stores::Redis`) with TTL, LRU-like expiry, and serialization handled transparently | Shipped |
+| Rails.cache adapter | Thin wrapper around `ActiveSupport::Cache::Store` for projects already using a configured Rails cache | Shipped |
+| Global default store | Set via `SafeMemoize.configure` — applies a default store to every memoized method without per-call configuration | Shipped |
 
 ---
 

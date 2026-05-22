@@ -32,12 +32,13 @@ module SafeMemoize
     attr_accessor active_support_notifications: bool
     attr_accessor statsd_client: untyped
     attr_accessor opentelemetry_tracer: untyped
+    attr_accessor default_store: Stores::Base?
 
     def initialize: () -> void
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?) -> void
     def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
@@ -197,6 +198,32 @@ module SafeMemoize
     include CustomKeyMethods
     include PublicCustomKeyMethods
     include LruMethods
+  end
+
+  module Stores
+    class Base
+      MISS: Object
+
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+      def exist?: (untyped key) -> bool
+    end
+
+    class Memory < Base
+      def initialize: () -> void
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+
+      private
+
+      def expired?: ({ expires_at: Float?, value: untyped, cached_at: Float }) -> bool
+    end
   end
 
   module Adapters
