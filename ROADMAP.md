@@ -15,7 +15,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 | OpenTelemetry spans | Optional adapter (`SafeMemoize::Adapters::OpenTelemetry`) wrapping computation time in a trace span for distributed tracing pipelines | Shipped |
 | Rails request-scope helper | Guide + optional mixin for resetting instance memos at the end of each request (controller concern, middleware, or Active Model pattern) | Shipped |
 | Formal benchmark suite | `benchmarks/` directory with comparisons against `memery`, `memo_wise`, and raw `||=`, covering single-threaded throughput and contention under concurrent load | Planned |
-| Concurrency stress tests | Dedicated spec suite hammering shared-cache paths and LRU eviction under high thread counts to surface race conditions | Planned |
+| Concurrency stress tests | Dedicated spec suite hammering shared-cache paths and LRU eviction under high thread counts to surface race conditions | Shipped |
 
 ---
 
