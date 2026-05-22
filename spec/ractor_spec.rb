@@ -27,7 +27,12 @@ require "spec_helper"
 # computation outside Ractors and send frozen results in via Ractor#send,
 # or use Ruby Threads (which SafeMemoize fully supports).
 
-RACTOR_SUPPORTED = defined?(Ractor) && RUBY_VERSION >= "3.0.0"
+# Ruby 4.0 redesigned the Ractor API and removed Ractor#take; the failure
+# modes documented here are specific to the Ruby 3.x Ractor model.
+RACTOR_SUPPORTED =
+  defined?(Ractor) &&
+  RUBY_VERSION >= "3.0.0" &&
+  Ractor.method_defined?(:take)
 
 RSpec.describe "SafeMemoize Ractor compatibility" do
   before { skip "Ractor not available on this Ruby" unless RACTOR_SUPPORTED }
