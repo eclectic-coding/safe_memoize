@@ -1085,6 +1085,33 @@ The following are available now but reside under `require "safe_memoize/rails"` 
 - `SafeMemoize::Adapters::StatsD`
 - `SafeMemoize::Adapters::OpenTelemetry`
 
+## Ruby version support
+
+### Supported versions
+
+SafeMemoize requires **Ruby ≥ 3.3**. Every non-EOL Ruby version in the table below is actively tested in CI and receives bug-fix backports for critical issues.
+
+| Ruby | Status | EOL |
+|---|---|---|
+| 3.3 | Supported | Mar 2027 |
+| 3.4 | Supported | Mar 2028 |
+| 4.0 | Supported | ~ Dec 2028 |
+
+EOL dates follow the [Ruby maintenance schedule](https://www.ruby-lang.org/en/downloads/branches/).
+
+### Policy
+
+- **Dropping an EOL version is a minor-version change**, not a major one — it will appear in the CHANGELOG under `### Removed` and the gemspec `required_ruby_version` will be updated accordingly.
+- SafeMemoize targets the **current stable release plus the two previous non-EOL minors** at any given time. When Ruby releases a new version in December, CI gains a new column; when a version reaches EOL the next minor release removes it.
+- **No patch release will ever raise the minimum Ruby version.** Only `x.y.0` minor releases may do so.
+- Prerelease Rubies (dev / preview builds) are not officially supported but breakage is investigated on a best-effort basis.
+
+### History
+
+| Dropped in | Ruby version removed |
+|---|---|
+| v0.5.0 | Ruby 3.2 (reached EOL) |
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the planned path to v1.0.0 and beyond, including upcoming features, API stability goals, and the versioning policy.
