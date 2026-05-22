@@ -101,6 +101,20 @@ module SafeMemoize
         raise ArgumentError, "shared: and store: cannot be combined" if shared
       end
 
+      # Resolve effective store: explicit store: wins; global default applies when
+      # compatible (max_size: and shared: are incompatible — fall back silently).
+      effective_store = store
+      if effective_store.nil? && !max_size && !shared
+        global_default = SafeMemoize.configuration.default_store
+        if global_default
+          unless global_default.is_a?(SafeMemoize::Stores::Base)
+            raise ArgumentError,
+              "SafeMemoize.configuration.default_store must be a Stores::Base instance (got #{global_default.class})"
+          end
+          effective_store = global_default
+        end
+      end
+
       __safe_memo_class_key_generators__[method_name] = key if key
 
       # Normalize to a single "should cache?" predicate
@@ -110,7 +124,7 @@ module SafeMemoize
         ->(result) { !cond_unless.call(result) }
       end
 
-      if store
+      if effective_store
         miss = SafeMemoize::Stores::Base::MISS
 
         mod = Module.new do
@@ -118,10 +132,10 @@ module SafeMemoize
             return super(*args, **kwargs, &block) if block
 
             cache_key = compute_cache_key(method_name, args, kwargs)
-            cached = store.read(cache_key)
+            cached = effective_store.read(cache_key)
 
             unless cached.equal?(miss)
-              store.write(cache_key, cached, expires_in: ttl) if ttl_refresh
+              effective_store.write(cache_key, cached, expires_in: ttl) if ttl_refresh
               record_cache_hit(method_name, args, kwargs)
               call_memo_hooks(:on_hit, cache_key, {value: cached, expires_at: nil, cached_at: nil})
               return cached
@@ -135,7 +149,7 @@ module SafeMemoize
 
             now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             if !condition || condition.call(value)
-              store.write(cache_key, value, expires_in: ttl)
+              effective_store.write(cache_key, value, expires_in: ttl)
               call_memo_hooks(:on_store, cache_key, {value: value, expires_at: nil, cached_at: now})
             end
 

@@ -32,6 +32,7 @@ module SafeMemoize
     attr_accessor active_support_notifications: bool
     attr_accessor statsd_client: untyped
     attr_accessor opentelemetry_tracer: untyped
+    attr_accessor default_store: Stores::Base?
 
     def initialize: () -> void
   end

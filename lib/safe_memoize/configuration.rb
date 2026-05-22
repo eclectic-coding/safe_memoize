@@ -42,6 +42,12 @@ module SafeMemoize
     #   When set, {Adapters::OpenTelemetry} wraps each cache-miss computation in a span.
     attr_accessor :opentelemetry_tracer
 
+    # @return [Stores::Base, nil] Default cache store applied to every {ClassMethods#memoize}
+    #   call that does not specify its own +store:+. +nil+ uses the built-in per-instance
+    #   hash cache. Methods using +max_size:+ or +shared:+ are incompatible with an external
+    #   store and will silently continue using the per-instance hash even when this is set.
+    attr_accessor :default_store
+
     # @api private
     def initialize
       @default_ttl = nil
@@ -51,6 +57,7 @@ module SafeMemoize
       @active_support_notifications = false
       @statsd_client = nil
       @opentelemetry_tracer = nil
+      @default_store = nil
     end
   end
 end
