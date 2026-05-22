@@ -963,6 +963,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | Symbol | Kind | Notes |
 |---|---|---|
 | `SafeMemoize::VERSION` | constant | Semver string, always present |
+| `SafeMemoize::Error` | class | Base error class (`< StandardError`) for rescuing any SafeMemoize-raised exception |
 | `SafeMemoize.configure { \|c\| … }` | module method | Yields `Configuration`; sets global defaults |
 | `SafeMemoize.configuration` | module method | Returns the current `Configuration` |
 | `SafeMemoize.reset_configuration!` | module method | Restores all configuration to defaults |
