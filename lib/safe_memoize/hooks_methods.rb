@@ -39,6 +39,10 @@ module SafeMemoize
       end
 
       safe_memo_notify(hook_type, cache_key) if SafeMemoize.configuration.active_support_notifications
+
+      if (client = SafeMemoize.configuration.statsd_client)
+        Adapters::StatsD.dispatch(client, hook_type, cache_key, self.class.name)
+      end
     end
 
     def safe_memo_notify(hook_type, cache_key)

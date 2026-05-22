@@ -3,7 +3,7 @@
 module SafeMemoize
   class Configuration
     attr_accessor :default_ttl, :default_max_size, :on_deprecation, :on_hook_error,
-      :active_support_notifications
+      :active_support_notifications, :statsd_client
 
     def initialize
       @default_ttl = nil
@@ -11,6 +11,7 @@ module SafeMemoize
       @on_deprecation = nil
       @on_hook_error = nil
       @active_support_notifications = false
+      @statsd_client = nil
     end
   end
 end

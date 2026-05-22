@@ -25,6 +25,7 @@ module SafeMemoize
     attr_accessor on_deprecation: (^(String message) -> void)?
     attr_accessor on_hook_error: (^(Exception error, Symbol hook_type, untyped cache_key) -> void)?
     attr_accessor active_support_notifications: bool
+    attr_accessor statsd_client: untyped
 
     def initialize: () -> void
   end
