@@ -88,7 +88,7 @@ module SafeMemoize
                 call_memo_hooks(:on_expire, cache_key, record) if record && !record_live
 
                 start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-                value = super(*args, **kwargs)
+                value = Adapters::OpenTelemetry.trace(SafeMemoize.configuration.opentelemetry_tracer, method_name, klass.name) { super(*args, **kwargs) }
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
                 new_record = memo_record(value, expires_at: memo_expires_at(ttl))
@@ -147,7 +147,7 @@ module SafeMemoize
                 memo_record_value(record)
               else
                 start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-                value = super(*args, **kwargs)
+                value = Adapters::OpenTelemetry.trace(SafeMemoize.configuration.opentelemetry_tracer, method_name, self.class.name) { super(*args, **kwargs) }
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
                 new_record = memo_record(value, expires_at: memo_expires_at(ttl))
@@ -174,7 +174,9 @@ module SafeMemoize
 
             # Cache miss - compute and store
             start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-            result = memo_fetch_or_store(cache_key, ttl: ttl) { super(*args, **kwargs) }
+            result = memo_fetch_or_store(cache_key, ttl: ttl) do
+              Adapters::OpenTelemetry.trace(SafeMemoize.configuration.opentelemetry_tracer, method_name, self.class.name) { super(*args, **kwargs) }
+            end
             elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
             with_memo_lock do
