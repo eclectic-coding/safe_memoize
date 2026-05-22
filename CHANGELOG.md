@@ -17,6 +17,12 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 - `SafeMemoize::Stores::Redis` — opt-in adapter (`require "safe_memoize/stores/redis"`) backed by any Redis-compatible client responding to `#get`, `#set`, `#del`, and `#scan_each`; values and keys are serialized with Marshal + `pack("m0")`; TTL is forwarded as `PX` (milliseconds, rounded up) for sub-second precision; `clear` uses `SCAN` to avoid blocking; all entries are namespaced (default: `"safe_memoize"`) so multiple stores or applications can share one Redis instance
 - `store:` option on `memoize` — accepts any `Stores::Base` subclass instance; routes all reads and writes through the adapter's `read`/`write` interface; the store is shared across all instances of the class; `ttl:` is forwarded as `expires_in:` to `write`, `ttl_refresh:` re-writes on every hit, and `if:`/`unless:` conditional storage is enforced at the SafeMemoize layer; raises `ArgumentError` if combined with `max_size:` (LRU belongs in the adapter) or `shared:`
 
+### Changed
+
+- Test suite achieves 100% line coverage — `spec_helper` now requires opt-in store adapters (`Stores::Redis`, `Stores::RailsCache`) after `SimpleCov.start` so Coverage tracks them; `Rakefile` runs `spec/stores/` before other specs to prevent Ruby 3.4 Coverage counter disruption from Ractor/concurrency tests; `version.rb` excluded from coverage reporting
+- `store:` type guard in `ClassMethods#memoize` collapsed to an inline guard clause so Ruby's Coverage module counts the raise correctly
+- Hook-error isolation tests (`concurrency_spec`, `hooks_spec`) now configure `on_hook_error = ->(*) {}` to silence expected stderr warnings rather than leaking them into test output; StatsD error-resilience test asserts on the emitted warning with `expect { }.to output(...).to_stderr`
+
 ## [1.0.0] - 2026-05-22
 
 ### Added
