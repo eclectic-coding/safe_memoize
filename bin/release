@@ -8,6 +8,7 @@ require_relative "../lib/safe_memoize/release_tooling"
 root = File.expand_path("..", File.dirname(__FILE__))
 version_file = File.join(root, "lib/safe_memoize/version.rb")
 changelog_file = File.join(root, "CHANGELOG.md")
+roadmap_file = File.join(root, "ROADMAP.md")
 release_date = Date.today
 dry_run = false
 
@@ -32,12 +33,17 @@ release_message = "Release v#{normalized_version}"
 
 version_contents = File.read(version_file)
 changelog_contents = File.read(changelog_file)
+roadmap_contents = File.read(roadmap_file)
 updated_version_contents = SafeMemoize::ReleaseTooling.update_version_file(version_contents, normalized_version)
 updated_changelog_contents = SafeMemoize::ReleaseTooling.finalize_changelog(changelog_contents, normalized_version, release_date)
+updated_roadmap_contents = SafeMemoize::ReleaseTooling.prune_roadmap(roadmap_contents)
 
 if dry_run
   puts "Validated #{release_message}."
   puts "Would update #{version_file} and #{changelog_file}."
+  if updated_roadmap_contents != roadmap_contents
+    puts "Would prune fully-shipped milestone sections from #{roadmap_file}."
+  end
   exit 0
 end
 
@@ -48,9 +54,10 @@ end
 
 File.write(version_file, updated_version_contents)
 File.write(changelog_file, updated_changelog_contents)
+File.write(roadmap_file, updated_roadmap_contents)
 
 commands = [
-  ["git", "add", version_file, changelog_file],
+  ["git", "add", version_file, changelog_file, roadmap_file],
   ["git", "commit", "-m", release_message],
   ["git", "tag", "-a", "v#{normalized_version}", "-m", release_message]
 ]

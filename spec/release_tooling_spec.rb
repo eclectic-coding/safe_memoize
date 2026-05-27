@@ -81,6 +81,95 @@ RSpec.describe SafeMemoize::ReleaseTooling do
     end
   end
 
+  describe ".prune_roadmap" do
+    let(:shipped_section) do
+      <<~MD.chomp
+        ## v1.2.0 — Async & Fiber-Safe Memoization
+
+        *Goal: concurrency.*
+
+        | Feature | Description | Status |
+        |---|---|---|
+        | Fiber-local | fiber_local: true | Shipped |
+        | Ractor cache | ractor_safe: true | Shipped |
+      MD
+    end
+
+    let(:planned_section) do
+      <<~MD.chomp
+        ## v2.0.0 — Next Generation
+
+        | Feature | Description | Status |
+        |---|---|---|
+        | Plugin arch | Extension API | Planned |
+        | DSL changes | New syntax | Planned |
+      MD
+    end
+
+    let(:mixed_section) do
+      <<~MD.chomp
+        ## v1.3.0 — Mixed
+
+        | Feature | Description | Status |
+        |---|---|---|
+        | Done thing | Already done | Shipped |
+        | Pending thing | Not yet | Planned |
+      MD
+    end
+
+    let(:non_milestone_section) do
+      <<~MD.chomp
+        ## Versioning policy
+
+        SafeMemoize follows Semantic Versioning from v1.0.0 onwards.
+      MD
+    end
+
+    def join(*sections)
+      sections.join("\n\n---\n\n")
+    end
+
+    it "removes a fully-shipped milestone section" do
+      roadmap = join("# Preamble", shipped_section, planned_section)
+      result = described_class.prune_roadmap(roadmap)
+      expect(result).not_to include("v1.2.0")
+      expect(result).to include("v2.0.0")
+    end
+
+    it "keeps a section with any Planned row" do
+      roadmap = join("# Preamble", mixed_section, planned_section)
+      result = described_class.prune_roadmap(roadmap)
+      expect(result).to include("v1.3.0")
+      expect(result).to include("v2.0.0")
+    end
+
+    it "keeps non-milestone sections unchanged" do
+      roadmap = join("# Preamble", shipped_section, non_milestone_section)
+      result = described_class.prune_roadmap(roadmap)
+      expect(result).to include("Versioning policy")
+    end
+
+    it "returns the contents unchanged when no sections are fully shipped" do
+      roadmap = join("# Preamble", planned_section)
+      expect(described_class.prune_roadmap(roadmap)).to eq(roadmap)
+    end
+
+    it "removes multiple fully-shipped sections in one pass" do
+      shipped2 = shipped_section.sub("v1.2.0", "v1.1.0")
+      roadmap = join("# Preamble", shipped_section, shipped2, planned_section)
+      result = described_class.prune_roadmap(roadmap)
+      expect(result).not_to include("v1.2.0")
+      expect(result).not_to include("v1.1.0")
+      expect(result).to include("v2.0.0")
+    end
+
+    it "preserves correct separator structure after pruning" do
+      roadmap = join("# Preamble", shipped_section, planned_section, non_milestone_section)
+      result = described_class.prune_roadmap(roadmap)
+      expect(result).to eq(join("# Preamble", planned_section, non_milestone_section))
+    end
+  end
+
   describe ".extract_release_notes" do
     it "returns the requested release section body" do
       contents = <<~MARKDOWN

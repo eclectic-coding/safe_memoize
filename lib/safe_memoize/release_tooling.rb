@@ -46,6 +46,31 @@ module SafeMemoize
       contents.sub(UNRELEASED_HEADING, "#{UNRELEASED_HEADING}\n\n#{release_heading}")
     end
 
+    # Removes milestone sections from ROADMAP.md where every feature row has
+    # "Shipped" status. Non-milestone sections (Versioning policy, Contributing,
+    # etc.) and sections with any non-Shipped row are left untouched.
+    #
+    # Sections are delimited by the +\n\n---\n\n+ horizontal-rule separator that
+    # the ROADMAP uses between headings. A milestone section is any section whose
+    # first non-blank line starts with +## v+.
+    def prune_roadmap(contents)
+      separator = "\n\n---\n\n"
+      sections = contents.split(separator)
+
+      pruned = sections.reject do |section|
+        next false unless section.lstrip.start_with?("## v")
+
+        # Table rows: lines starting with "|"; drop alignment rows (only |, -, :, whitespace)
+        rows = section.lines.select { |l| l.strip.start_with?("|") }
+        rows = rows.reject { |l| l.match?(/\A[\s|:-]+\z/) }
+        data_rows = rows.drop(1) # first row is the header
+
+        data_rows.any? && data_rows.all? { |row| row.strip.end_with?("Shipped |") }
+      end
+
+      pruned.join(separator)
+    end
+
     def extract_release_notes(contents, version)
       normalized_version = normalize_version(version)
       lines = contents.lines
