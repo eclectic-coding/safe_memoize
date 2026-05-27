@@ -13,5 +13,6 @@ module SafeMemoize
     include CustomKeyMethods
     include PublicCustomKeyMethods
     include LruMethods
+    include FiberLocalMethods
   end
 end
