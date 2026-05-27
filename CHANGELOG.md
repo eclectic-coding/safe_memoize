@@ -10,6 +10,11 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ### Added
 
+- `ractor_safe: true` option on `memoize` — replaces the `Mutex`-backed class-level shared cache with a supervisor `Ractor` that owns the mutable cache hash; all reads and writes are serialised through message passing so the cache is safe to use from multiple Ractors; requires `shared: true`; cached values are deep-frozen via `Ractor.make_shareable`; the memoize wrapper Proc is frozen with `Ractor.make_shareable` before being passed to `define_method` so that classes using `ractor_safe: true` can be passed directly into worker Ractors; incompatible with `if:`, `unless:`, `max_size:`, `ttl_refresh:`, `key:`, and `store:` (raises `ArgumentError`); `ttl:` is supported
+- `.reset_ractor_memo(method_name, *args, **kwargs)` — class method to clear one or all entries from the Ractor-safe shared cache for a given method
+- `.reset_all_ractor_memos` — class method to clear the entire Ractor-safe shared cache for this class
+- `.ractor_memoized?(method_name, *args, **kwargs)` — returns `true` if a live entry exists in the Ractor-safe shared cache for the given call signature
+- `.ractor_memo_count(method_name = nil)` — returns the number of live entries in the Ractor-safe shared cache; scoped to one method when a name is given
 - `fiber_local: true` option on `memoize` — stores results in `Fiber[:__safe_memoize__]` rather than instance variables, giving each fiber its own isolated cache that is automatically discarded when the fiber terminates; no `Mutex` is acquired because fibers are cooperative; a per-fiber ownership sentinel ensures inherited storage from parent fibers is replaced with a fresh isolated store on first write; supports all standard options (`ttl:`, `ttl_refresh:`, `max_size:`, `if:`, `unless:`, `key:`); incompatible with `shared:` and `store:` (raises `ArgumentError`)
 - `#fiber_local_memoized?(method_name, *args, **kwargs)` — returns `true` if the given call is currently cached in the current fiber's store
 - `#reset_fiber_memo(method_name, *args, **kwargs)` — clears one or all fiber-local cached entries for a method in the current fiber
@@ -17,6 +22,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ### Fixed
 
+- `call_memo_hooks` no longer raises `Ractor::IsolationError` when called from a worker Ractor — `SafeMemoize.configuration` (a module-level ivar) is now accessed only from the main Ractor; `ActiveSupport::Notifications` and `StatsD` dispatch are silently skipped from worker Ractors; hook-error handling falls back to `warn` rather than reading the configuration handler
+- CI coverage ordering — ractor specs now run *last* (after all other specs) so that Ractor background threads cannot disrupt Ruby's Coverage counters while collecting coverage for non-Ractor code; previously only store specs were ordered first
 - Codecov reporting accuracy — switched SimpleCov output from `.resultset.json` (internal format, misread by Codecov as ~85%) to `coverage/coverage.json` via `simplecov_json_formatter`; CI now uploads the correct file
 - CI coverage ordering — `bundle exec rspec` ran files alphabetically, causing `ractor_spec.rb` to execute before `spec/stores/`, disrupting Ruby's Coverage counters and dropping reported coverage to ~96%; CI now uses `bundle exec rake spec`, which enforces the store-first ordering already documented in the Rakefile
 
