@@ -29,6 +29,10 @@ module SafeMemoize
     #   {Stores::Base} subclass instance. The store is shared across all instances of the
     #   class. When +nil+, the default per-instance in-process hash is used.
     #   Cannot be combined with +max_size:+ or +shared:+.
+    # @param fiber_local [Boolean] when +true+, results are stored in
+    #   +Fiber[:__safe_memoize__]+ rather than instance variables. Each fiber gets its
+    #   own isolated cache that is automatically discarded when the fiber terminates. No
+    #   mutex is acquired. Cannot be combined with +shared:+ or +store:+.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -46,7 +50,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -97,6 +101,11 @@ module SafeMemoize
         raise ArgumentError, "store: must be a SafeMemoize::Stores::Base instance (got #{store.class})" unless store.is_a?(SafeMemoize::Stores::Base)
         raise ArgumentError, "max_size: is not supported with store: — use the store adapter's own eviction" if max_size
         raise ArgumentError, "shared: and store: cannot be combined" if shared
+      end
+
+      if fiber_local
+        raise ArgumentError, "fiber_local: and shared: cannot be combined" if shared
+        raise ArgumentError, "fiber_local: and store: cannot be combined" if store
       end
 
       # Resolve effective store: explicit store: wins; global default applies when
@@ -155,6 +164,70 @@ module SafeMemoize
             call_memo_hooks(:on_miss, cache_key, {value: value, expires_at: nil, cached_at: now})
 
             value
+          end
+
+          send(visibility, method_name)
+        end
+
+        prepend mod
+
+        return
+      end
+
+      if fiber_local
+        mod = Module.new do
+          define_method(method_name) do |*args, **kwargs, &block|
+            return super(*args, **kwargs, &block) if block
+
+            cache_key = compute_cache_key(method_name, args, kwargs)
+            fiber_cache = fiber_memo_cache!
+            record = fiber_cache[cache_key]
+
+            if memo_record_live?(record)
+              if max_size
+                lru = fiber_memo_lru![method_name] ||= {}
+                lru.delete(cache_key)
+                lru[cache_key] = true
+              end
+              record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
+              record_cache_hit(method_name, args, kwargs)
+              call_memo_hooks(:on_hit, cache_key, record)
+              memo_record_value(record)
+            else
+              call_memo_hooks(:on_expire, cache_key, record) if record
+
+              start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+              value = Adapters::OpenTelemetry.trace(
+                SafeMemoize.configuration.opentelemetry_tracer, method_name, self.class.name
+              ) { super(*args, **kwargs) }
+              elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+
+              new_record = memo_record(value, expires_at: memo_expires_at(ttl))
+
+              if !condition || condition.call(value)
+                if max_size
+                  lru = fiber_memo_lru![method_name] ||= {}
+                  if lru.size >= max_size
+                    evict_key = lru.keys.first
+                    lru.delete(evict_key)
+                    evicted = fiber_cache.delete(evict_key)
+                    call_memo_hooks(:on_evict, evict_key, evicted) if evicted
+                  end
+                end
+                fiber_cache[cache_key] = new_record
+                if max_size
+                  lru = fiber_memo_lru![method_name] ||= {}
+                  lru.delete(cache_key)
+                  lru[cache_key] = true
+                end
+                call_memo_hooks(:on_store, cache_key, new_record)
+              end
+
+              record_cache_miss(method_name, args, kwargs, elapsed_time)
+              call_memo_hooks(:on_miss, cache_key, new_record)
+
+              value
+            end
           end
 
           send(visibility, method_name)

@@ -69,6 +69,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [`shared_memo_age` and `shared_memo_stale?` for shared cache TTL inspection](#shared-cache)
 - [Pluggable external cache stores — Redis, Rails.cache, or any custom adapter](#pluggable-cache-stores)
 - [Global default store via `Configuration#default_store`](#pluggable-cache-stores)
+- [Fiber-local memoization via `fiber_local: true` — isolated per-fiber cache, no mutex, works with Async/Falcon](#fiber-local-memoization)
 
 ## Installation
 
@@ -497,6 +498,48 @@ memoize :find, shared: true, max_size: 500
 ```
 
 Hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`, `on_memo_evict`) fire on the calling instance as usual.
+
+[↑ Back to features](#features)
+
+### Fiber-local memoization
+
+Pass `fiber_local: true` to store results in `Fiber[:__safe_memoize__]` rather than instance variables. Each fiber gets its own isolated cache that is automatically discarded when the fiber terminates — no explicit cleanup required.
+
+This is the right choice for Fiber-based concurrency frameworks like [Async](https://github.com/socketry/async), [Falcon](https://github.com/socketry/falcon), and Rails async controllers, where multiple fibers share the same object instance and must not see each other's cached values.
+
+```ruby
+class ApiClient
+  prepend SafeMemoize
+
+  def fetch(path)
+    http_get(path)
+  end
+
+  memoize :fetch, fiber_local: true
+end
+
+client = ApiClient.new
+
+Fiber.new { client.fetch("/a") }.resume  # computes in this fiber
+Fiber.new { client.fetch("/a") }.resume  # computes again — isolated cache
+```
+
+`fiber_local: true` works with all standard options: `ttl:`, `ttl_refresh:`, `max_size:`, `if:`, `unless:`, and `key:`. It is incompatible with `shared:` and `store:` (both raise `ArgumentError`).
+
+No `Mutex` is acquired because fibers within a single thread are cooperative — only one fiber executes at a time.
+
+**Fiber isolation guarantee**: Ruby's `Fiber.new` inherits the parent fiber's local storage by default. SafeMemoize detects inherited stores via an ownership sentinel and replaces them with a fresh, isolated store on first write, so child fibers never see the parent's cached entries.
+
+Instance-level inspection and reset for fiber-local entries use dedicated methods:
+
+```ruby
+obj.fiber_local_memoized?(:fetch, "/a")  # true / false for the current fiber
+obj.reset_fiber_memo(:fetch)             # clear all entries for :fetch in current fiber
+obj.reset_fiber_memo(:fetch, "/a")       # clear one specific entry
+obj.reset_all_fiber_memos                # clear all fiber-local entries for this instance
+```
+
+Lifecycle hooks and cache metrics work the same as for regular memoization. The existing `memoized?`, `reset_memo`, and `memo_count` methods operate on the instance-variable cache; use the `fiber_local_*` / `reset_fiber_*` API for fiber-local entries.
 
 [↑ Back to features](#features)
 
@@ -1086,6 +1129,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `shared:` | `Boolean` | `false` | Class-level shared cache |
 | `key:` | `Proc \| nil` | `nil` | Class-level custom key generator |
 | `store:` | `Stores::Base \| nil` | `nil` | External cache store adapter; incompatible with `max_size:` and `shared:` |
+| `fiber_local:` | `Boolean` | `false` | Fiber-local cache; each fiber gets an isolated store; incompatible with `shared:` and `store:` |
 
 ### `memoize_all` options (class method)
 
@@ -1158,6 +1202,14 @@ All `memoize` option keys above, plus:
 |---|---|
 | `memoize_with_custom_key(method_name) { \|*args, **kwargs\| … }` | Instance-level key generator |
 | `clear_custom_keys(method_name = nil)` | Remove one or all key generators |
+
+**Fiber-local cache (when any method uses `fiber_local: true`)**
+
+| Method | Returns |
+|---|---|
+| `fiber_local_memoized?(method_name, *args, **kwargs)` | `Boolean` — cached in the current fiber? |
+| `reset_fiber_memo(method_name, *args, **kwargs)` | `nil` — clear one or all entries in current fiber |
+| `reset_all_fiber_memos` | `nil` — clear all fiber-local entries for this instance |
 
 ### Shared-cache class methods (added when any method uses `shared: true`)
 
