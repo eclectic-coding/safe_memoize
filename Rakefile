@@ -4,12 +4,16 @@ require "bundler/gem_tasks"
 require "rspec/core/rake_task"
 
 RSpec::Core::RakeTask.new(:spec) do |t|
-  # Run store specs first: Ruby Coverage counters for opt-in adapters
-  # (redis, rails_cache) must be exercised before Ractor/concurrency tests
-  # run, which can disrupt coverage tracking in certain Ruby 3.4 builds.
+  # Ordering ensures accurate coverage tracking in Ruby 3.4:
+  # 1. Store specs first: opt-in adapter lines must be hit before Ractor tests
+  #    can disrupt Ruby's Coverage counters.
+  # 2. Ractor specs last: Ractor-based tests spin up background Ractors whose
+  #    internal threads can cause later coverage samples to be missed if they
+  #    interleave with SimpleCov's collection phase.
   store_specs = Dir["spec/stores/**/*_spec.rb"].sort
-  other_specs = Dir["spec/**/*_spec.rb"].sort - store_specs
-  t.rspec_opts = (store_specs + other_specs).join(" ")
+  ractor_specs = Dir["spec/ractor*_spec.rb"].sort
+  other_specs = Dir["spec/**/*_spec.rb"].sort - store_specs - ractor_specs
+  t.rspec_opts = (store_specs + other_specs + ractor_specs).join(" ")
   t.pattern = "non_existent_placeholder" # overridden by rspec_opts file args
 end
 

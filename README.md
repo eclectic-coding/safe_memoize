@@ -70,6 +70,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Pluggable external cache stores — Redis, Rails.cache, or any custom adapter](#pluggable-cache-stores)
 - [Global default store via `Configuration#default_store`](#pluggable-cache-stores)
 - [Fiber-local memoization via `fiber_local: true` — isolated per-fiber cache, no mutex, works with Async/Falcon](#fiber-local-memoization)
+- [Ractor-safe shared cache via `ractor_safe: true` — supervisor Ractor replaces the Mutex; worker Ractors can call the memoized method directly](#ractor-safe-shared-cache)
 
 ## Installation
 
@@ -1041,17 +1042,72 @@ end
 
 [↑ Back to features](#features)
 
+## Ractor-safe shared cache
+
+Pass `ractor_safe: true` (together with `shared: true`) to replace the `Mutex`-backed class-level shared cache with a supervisor `Ractor` that owns the mutable cache hash. All reads and writes are serialised through message passing, so the cache is safe to use from multiple Ractors.
+
+```ruby
+class PriceService
+  prepend SafeMemoize
+
+  def fetch_price(item_id)
+    external_api.get("/prices/#{item_id}")
+  end
+
+  memoize :fetch_price, shared: true, ractor_safe: true, ttl: 300
+end
+
+# Main Ractor — multiple threads share one cache entry
+20.times.map { Thread.new { PriceService.new.fetch_price(42) } }.map(&:value)
+
+# Worker Ractors also read from and write to the same supervisor cache
+result = Ractor.new(PriceService) { |s| s.new.fetch_price(42) }.take
+```
+
+### How it works
+
+- A **supervisor `Ractor`** is created once per class the first time a `ractor_safe: true` method is memoized. It owns a plain Ruby `Hash` and responds to `:fetch`, `:store`, `:delete_all`, `:delete_one`, `:clear`, `:memoized`, and `:count` messages.
+- The memoize **wrapper Proc** is frozen via `Ractor.make_shareable` before being registered with `define_method`, so the class can be passed directly into `Ractor.new` blocks.
+- Cached values are deep-frozen via `Ractor.make_shareable`. Values that cannot be made shareable (e.g. a `Mutex`) raise `ArgumentError`.
+- **Thread safety** inside the main Ractor (multiple threads) is handled by per-call tags (`Thread.current.object_id`) combined with `Ractor.receive_if`, so concurrent threads never consume each other's replies.
+- `ttl:` is supported. Expired entries are skipped by the supervisor's `:fetch` handler.
+
+### Constraints
+
+`ractor_safe: true` is intentionally limited. The following options are incompatible and raise `ArgumentError` at `memoize` time:
+
+| Option | Reason |
+|---|---|
+| `if:` / `unless:` | Conditional Procs are non-Ractor-shareable |
+| `max_size:` | LRU order tracking requires a non-shareable Ruby `Hash` |
+| `ttl_refresh:` | Requires re-examining the record on every hit |
+| `key:` | Custom key Procs are non-Ractor-shareable |
+| `store:` | External adapters are incompatible with the supervisor model |
+
+### Class-level API
+
+```ruby
+PriceService.ractor_memoized?(:fetch_price, 42)     # → true / false
+PriceService.ractor_memo_count                       # → total live entries
+PriceService.ractor_memo_count(:fetch_price)         # → entries for one method
+PriceService.reset_ractor_memo(:fetch_price, 42)     # → clear one entry
+PriceService.reset_ractor_memo(:fetch_price)         # → clear all entries for method
+PriceService.reset_all_ractor_memos                  # → clear entire shared cache
+```
+
+[↑ Back to features](#features)
+
 ## Ractor compatibility
 
-SafeMemoize is **not Ractor-compatible** in its current form. Passing a class that uses `memoize` into a `Ractor.new` block raises `RuntimeError: defined with an un-shareable Proc in a different Ractor`. There are two root causes:
+Regular `memoize` (without `ractor_safe: true`) is **not Ractor-compatible**. Passing a class that uses `memoize` into a `Ractor.new` block raises `RuntimeError: defined with an un-shareable Proc in a different Ractor`. There are two root causes:
 
 1. **Non-shareable closures.** `ClassMethods#memoize` builds anonymous modules using `define_method` with blocks that close over local variables (`ttl`, `max_size`, `condition`, `shared_mutex`, …). Ruby marks those Procs as non-Ractor-shareable, so the host class cannot be sent to a Ractor.
 
-2. **Mutable module-level state.** `SafeMemoize.configuration` reads `@configuration` from the `SafeMemoize` module — a mutable ivar on a shared constant — which raises `Ractor::IsolationError` from a non-main Ractor. This affects every memoized call because hooks and adapters always read the configuration.
+2. **Mutable module-level state.** `SafeMemoize.configuration` reads `@configuration` from the `SafeMemoize` module — a mutable ivar on a shared constant — which raises `Ractor::IsolationError` from a non-main Ractor.
 
-**Workaround:** Use Ruby Threads instead of Ractors — SafeMemoize is fully thread-safe via double-check locking and per-instance Mutexes. If you need true parallelism with Ractors, perform computation inside the Ractor without memoization and send frozen results back via `Ractor#send`.
+**Workaround for shared caches:** use `memoize :method, shared: true, ractor_safe: true` (see [Ractor-safe shared cache](#ractor-safe-shared-cache) above).
 
-Ractor support is tracked in the v1.0.0 roadmap. The fix would require replacing closed-over variables with frozen shareable bindings and making `Configuration` a frozen value object, which is a significant redesign.
+**Workaround for per-instance caches:** Use Ruby Threads instead of Ractors — SafeMemoize is fully thread-safe via double-check locking and per-instance Mutexes. If you need true parallelism with Ractors, perform computation inside the Ractor without memoization and send frozen results back via `Ractor#send`.
 
 ## Development
 
@@ -1130,6 +1186,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `key:` | `Proc \| nil` | `nil` | Class-level custom key generator |
 | `store:` | `Stores::Base \| nil` | `nil` | External cache store adapter; incompatible with `max_size:` and `shared:` |
 | `fiber_local:` | `Boolean` | `false` | Fiber-local cache; each fiber gets an isolated store; incompatible with `shared:` and `store:` |
+| `ractor_safe:` | `Boolean` | `false` | Supervisor-Ractor shared cache; replaces the `Mutex`; worker Ractors can call the method; requires `shared: true`; cached values are deep-frozen; incompatible with `if:`, `unless:`, `max_size:`, `ttl_refresh:`, `key:`, and `store:` |
 
 ### `memoize_all` options (class method)
 
@@ -1221,6 +1278,15 @@ All `memoize` option keys above, plus:
 | `shared_memo_count(method_name = nil)` | `Integer` |
 | `shared_memo_age(method_name, *args, **kwargs)` | `Numeric \| nil` |
 | `shared_memo_stale?(method_name, *args, **kwargs)` | `Boolean` |
+
+**Ractor-safe shared cache (added when any method uses `ractor_safe: true`)**
+
+| Method | Returns |
+|---|---|
+| `reset_ractor_memo(method_name, *args, **kwargs)` | `nil` — clear one or all entries |
+| `reset_all_ractor_memos` | `nil` — clear the entire Ractor-safe shared cache |
+| `ractor_memoized?(method_name, *args, **kwargs)` | `Boolean` — live entry exists? |
+| `ractor_memo_count(method_name = nil)` | `Integer` — live entry count |
 
 ### `SafeMemoize::Configuration` attributes
 

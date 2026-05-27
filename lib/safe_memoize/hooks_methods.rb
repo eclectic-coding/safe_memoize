@@ -31,13 +31,18 @@ module SafeMemoize
       hooks.each do |hook|
         hook.call(cache_key, record)
       rescue => error
-        handler = SafeMemoize.configuration.on_hook_error
+        # SafeMemoize.configuration is not accessible from non-main Ractors
+        handler = (Ractor.current == Ractor.main) ? SafeMemoize.configuration.on_hook_error : nil
         if handler
           handler.call(error, hook_type, cache_key)
         else
           warn "[SafeMemoize] Hook error in #{hook_type}: #{error.message}"
         end
       end
+
+      # ActiveSupport::Notifications and StatsD integration require main-Ractor
+      # configuration access; skip them from worker Ractors.
+      return if Ractor.current != Ractor.main
 
       safe_memo_notify(hook_type, cache_key) if SafeMemoize.configuration.active_support_notifications
 
