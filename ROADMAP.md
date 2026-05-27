@@ -10,7 +10,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 | Feature | Description | Status |
 |---|---|---|
-| Fiber-local memoization mode | `memoize :method, fiber_local: true` stores results in `Fiber[:safe_memoize_cache]` rather than instance variables, giving each fiber its own isolated cache automatically reset when the fiber terminates | Planned |
+| Fiber-local memoization mode | `memoize :method, fiber_local: true` stores results in `Fiber[:safe_memoize_cache]` rather than instance variables, giving each fiber its own isolated cache automatically reset when the fiber terminates | Shipped |
 | Ractor-compatible shared cache | Revisit `shared: true` using `Ractor::TVar` or shareable frozen objects so class-level caches work across Ractors | Planned |
 | concurrent-ruby integration | Optional adapter using `Concurrent::Map` and `Concurrent::ReentrantReadWriteLock` as a drop-in replacement for `Mutex` where higher read-concurrency is desirable | Planned |
 
