@@ -33,6 +33,11 @@ module SafeMemoize
     #   +Fiber[:__safe_memoize__]+ rather than instance variables. Each fiber gets its
     #   own isolated cache that is automatically discarded when the fiber terminates. No
     #   mutex is acquired. Cannot be combined with +shared:+ or +store:+.
+    # @param ractor_safe [Boolean] when +true+, the class-level shared cache is owned by
+    #   a supervisor +Ractor+ rather than a +Mutex+-protected ivar, making it accessible
+    #   from worker Ractors. Requires +shared: true+. Cached values are deep-frozen via
+    #   +Ractor.make_shareable+. Incompatible with +if:+, +unless:+, +max_size:+,
+    #   +ttl_refresh:+, +key:+, and +store:+.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -50,7 +55,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -106,6 +111,15 @@ module SafeMemoize
       if fiber_local
         raise ArgumentError, "fiber_local: and shared: cannot be combined" if shared
         raise ArgumentError, "fiber_local: and store: cannot be combined" if store
+      end
+
+      if ractor_safe
+        raise ArgumentError, "ractor_safe: requires shared: true" unless shared
+        raise ArgumentError, "ractor_safe: is incompatible with if:/unless:" if cond_if || cond_unless
+        raise ArgumentError, "ractor_safe: is incompatible with max_size:" if max_size
+        raise ArgumentError, "ractor_safe: is incompatible with ttl_refresh:" if ttl_refresh
+        raise ArgumentError, "ractor_safe: is incompatible with key:" if key
+        raise ArgumentError, "ractor_safe: is incompatible with store:" if store
       end
 
       # Resolve effective store: explicit store: wins; global default applies when
@@ -235,6 +249,13 @@ module SafeMemoize
 
         prepend mod
 
+        return
+      end
+
+      if ractor_safe
+        extend(RactorSharedMethods) unless is_a?(RactorSharedMethods)
+        supervisor = __safe_memo_ractor_supervisor__
+        __memoize_ractor_safe__(method_name, ttl, visibility, supervisor)
         return
       end
 
@@ -549,6 +570,68 @@ module SafeMemoize
       return :protected if protected_method_defined?(method_name)
 
       :public
+    end
+
+    # Builds and prepends the ractor_safe memoize wrapper in its own method so
+    # the Proc only closes over the four Ractor-shareable locals (method_name,
+    # ttl, visibility, supervisor) rather than the full memoize binding, which
+    # contains non-shareable objects like SafeMemoize.configuration.
+    #
+    # The Proc is created inside module_eval so its self is the anonymous
+    # module (a shareable object), then frozen via Ractor.make_shareable before
+    # being passed to define_method. Without that step, ANY define_method Proc
+    # is considered non-shareable by Ruby 3.x even when it captures nothing.
+    def __memoize_ractor_safe__(method_name, ttl, visibility, supervisor)
+      mod = Module.new
+      wrapper = mod.module_eval do
+        Ractor.make_shareable(
+          proc do |*args, **kwargs, &block|
+            return super(*args, **kwargs, &block) if block
+
+            cache_key = Ractor.make_shareable([method_name, deep_freeze_copy(args), deep_freeze_copy(kwargs)])
+
+            tag = Thread.current.object_id
+            supervisor.send(Ractor.make_shareable([Ractor.current, tag, :fetch, cache_key]))
+            response = Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
+
+            if response[:hit]
+              record_cache_hit(method_name, args, kwargs)
+              call_memo_hooks(:on_hit, cache_key, response[:record])
+              return response[:record][:value]
+            end
+
+            start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            value = super(*args, **kwargs)
+            elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+
+            begin
+              shareable_value = Ractor.make_shareable(value)
+            rescue => e
+              raise ArgumentError, "ractor_safe: memoized values must be Ractor-shareable (#{e.message})"
+            end
+
+            now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            record = Ractor.make_shareable({
+              value: shareable_value,
+              expires_at: ttl ? now + ttl : nil,
+              cached_at: now
+            })
+
+            supervisor.send(Ractor.make_shareable([Ractor.current, tag, :store, cache_key, record]))
+            stored = Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
+            stored_record = stored[:stored]
+
+            record_cache_miss(method_name, args, kwargs, elapsed_time)
+            call_memo_hooks(:on_store, cache_key, stored_record)
+            call_memo_hooks(:on_miss, cache_key, stored_record)
+
+            stored_record[:value]
+          end
+        )
+      end
+      mod.define_method(method_name, wrapper)
+      mod.send(visibility, method_name)
+      prepend mod
     end
   end
 end

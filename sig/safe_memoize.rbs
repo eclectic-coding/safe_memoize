@@ -38,7 +38,7 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool) -> void
     def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
@@ -204,6 +204,18 @@ module SafeMemoize
     def fiber_memo_store_or_nil: () -> { cache: Hash[memo_key, memo_record], lru: Hash[Symbol, Hash[memo_key, true]] }?
     def fiber_memo_cache_or_nil: () -> Hash[memo_key, memo_record]?
     def fiber_memo_lru_or_nil: () -> Hash[Symbol, Hash[memo_key, true]]?
+  end
+
+  module RactorSharedMethods
+    def reset_ractor_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
+    def reset_all_ractor_memos: () -> void
+    def ractor_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
+    def ractor_memo_count: (?(Symbol | String) method_name) -> Integer
+
+    private
+
+    def __ractor_cache_send__: (untyped supervisor, Symbol op, *untyped args) -> untyped
+    def __safe_memo_ractor_supervisor__: () -> untyped
   end
 
   module InstanceMethods

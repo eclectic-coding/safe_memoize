@@ -18,6 +18,7 @@ require_relative "safe_memoize/custom_key_methods"
 require_relative "safe_memoize/public_custom_key_methods"
 require_relative "safe_memoize/lru_methods"
 require_relative "safe_memoize/fiber_local_methods"
+require_relative "safe_memoize/ractor_shared_methods"
 require_relative "safe_memoize/instance_methods"
 
 # Thread-safe memoization for Ruby that correctly handles +nil+ and +false+ values.
