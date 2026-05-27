@@ -8,6 +8,13 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- `fiber_local: true` option on `memoize` — stores results in `Fiber[:__safe_memoize__]` rather than instance variables, giving each fiber its own isolated cache that is automatically discarded when the fiber terminates; no `Mutex` is acquired because fibers are cooperative; a per-fiber ownership sentinel ensures inherited storage from parent fibers is replaced with a fresh isolated store on first write; supports all standard options (`ttl:`, `ttl_refresh:`, `max_size:`, `if:`, `unless:`, `key:`); incompatible with `shared:` and `store:` (raises `ArgumentError`)
+- `#fiber_local_memoized?(method_name, *args, **kwargs)` — returns `true` if the given call is currently cached in the current fiber's store
+- `#reset_fiber_memo(method_name, *args, **kwargs)` — clears one or all fiber-local cached entries for a method in the current fiber
+- `#reset_all_fiber_memos` — clears all fiber-local cached entries for this instance in the current fiber
+
 ### Fixed
 
 - Codecov reporting accuracy — switched SimpleCov output from `.resultset.json` (internal format, misread by Codecov as ~85%) to `coverage/coverage.json` via `simplecov_json_formatter`; CI now uploads the correct file
