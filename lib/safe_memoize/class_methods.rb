@@ -122,17 +122,23 @@ module SafeMemoize
         raise ArgumentError, "ractor_safe: is incompatible with store:" if store
       end
 
-      # Resolve effective store: explicit store: wins; global default applies when
-      # compatible (max_size: and shared: are incompatible — fall back silently).
+      # Resolve effective store: per-method store: wins; then class-level
+      # safe_memoize_store; then global default_store. max_size: and shared:
+      # are incompatible with external stores — fall back silently.
       effective_store = store
       if effective_store.nil? && !max_size && !shared
-        global_default = SafeMemoize.configuration.default_store
-        if global_default
-          unless global_default.is_a?(SafeMemoize::Stores::Base)
-            raise ArgumentError,
-              "SafeMemoize.configuration.default_store must be a Stores::Base instance (got #{global_default.class})"
+        class_store = safe_memoize_store
+        if class_store
+          effective_store = class_store
+        else
+          global_default = SafeMemoize.configuration.default_store
+          if global_default
+            unless global_default.is_a?(SafeMemoize::Stores::Base)
+              raise ArgumentError,
+                "SafeMemoize.configuration.default_store must be a Stores::Base instance (got #{global_default.class})"
+            end
+            effective_store = global_default
           end
-          effective_store = global_default
         end
       end
 
@@ -395,6 +401,32 @@ module SafeMemoize
       end
 
       prepend mod
+    end
+
+    # Returns the class-level default cache store, or +nil+ if not set.
+    #
+    # Set this to any {Stores::Base} instance to route every +memoize+ call on
+    # this class through that store, without needing to pass +store:+ to each
+    # individual +memoize+ call.  A per-method +store:+ option still takes
+    # precedence, and the global {SafeMemoize::Configuration#default_store} is
+    # the final fallback.
+    #
+    # @return [Stores::Base, nil]
+    def safe_memoize_store
+      @__safe_memoize_store__
+    end
+
+    # Sets the class-level default cache store.
+    #
+    # @param store [Stores::Base, nil] a store instance, or +nil+ to clear
+    # @return [Stores::Base, nil]
+    # @raise [ArgumentError] if +store+ is not a {Stores::Base} instance (and not +nil+)
+    def safe_memoize_store=(store)
+      if store && !store.is_a?(SafeMemoize::Stores::Base)
+        raise ArgumentError,
+          "safe_memoize_store= must be a SafeMemoize::Stores::Base instance (got #{store.class})"
+      end
+      @__safe_memoize_store__ = store
     end
 
     # Memoizes every eligible public instance method defined directly on the class.

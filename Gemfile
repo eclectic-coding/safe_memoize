@@ -12,6 +12,9 @@ gem "rspec", "~> 3.0"
 
 gem "standard", "~> 1.3"
 
+# Optional adapters (soft deps — not required at runtime)
+gem "concurrent-ruby", "~> 1.3", require: false
+
 # Benchmarking
 gem "benchmark-ips", "~> 2.13", require: false
 
