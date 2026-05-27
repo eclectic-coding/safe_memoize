@@ -2,7 +2,10 @@
 
 require "spec_helper"
 
-RACTOR_SAFE_SUPPORTED = defined?(Ractor) && RUBY_VERSION >= "3.3.0"
+RACTOR_SAFE_SUPPORTED =
+  defined?(Ractor) &&
+  RUBY_VERSION >= "3.0.0" &&
+  Ractor.method_defined?(:take)
 
 RSpec.describe "SafeMemoize ractor_safe: true" do
   before { skip "Ractor not available on this Ruby" unless RACTOR_SAFE_SUPPORTED }
