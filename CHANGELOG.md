@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-27
+
 ### Added
 
 - `SafeMemoize::Adapters::ConcurrentRuby` — optional store adapter backed by `concurrent-ruby`; uses `Concurrent::Map` as the backing hash and `Concurrent::ReentrantReadWriteLock` to allow multiple readers to proceed in parallel while writers still get exclusive access; reduces lock contention on hot read paths compared to the default `Mutex`-backed `Stores::Memory`; `concurrent-ruby` is a soft dependency — a `LoadError` with an actionable message is raised at instantiation if the gem is not available

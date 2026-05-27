@@ -4,18 +4,6 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 ---
 
-## v1.2.0 — Async & Fiber-Safe Memoization
-
-*Goal: first-class support for Fiber-based concurrency frameworks (Async, Falcon, Rails async controllers).*
-
-| Feature | Description | Status |
-|---|---|---|
-| Fiber-local memoization mode | `memoize :method, fiber_local: true` stores results in `Fiber[:safe_memoize_cache]` rather than instance variables, giving each fiber its own isolated cache automatically reset when the fiber terminates | Shipped |
-| Ractor-compatible shared cache | `memoize :method, shared: true, ractor_safe: true` — supervisor Ractor owns the cache hash; worker Ractors can call the memoized method directly; cached values deep-frozen via `Ractor.make_shareable` | Shipped |
-| concurrent-ruby integration | Optional adapter using `Concurrent::Map` and `Concurrent::ReentrantReadWriteLock` as a drop-in replacement for `Mutex` where higher read-concurrency is desirable | Shipped |
-
----
-
 ## v2.0.0 — Next Generation (Long Horizon)
 
 *Goal: incorporate real-world usage feedback, clean up accumulated API surface, and open a path for advanced extension.*

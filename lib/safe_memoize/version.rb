@@ -2,5 +2,5 @@
 
 module SafeMemoize
   # The current gem version string.
-  VERSION = "1.1.0"
+  VERSION = "1.2.0"
 end
