@@ -69,6 +69,8 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [`shared_memo_age` and `shared_memo_stale?` for shared cache TTL inspection](#shared-cache)
 - [Pluggable external cache stores — Redis, Rails.cache, or any custom adapter](#pluggable-cache-stores)
 - [Global default store via `Configuration#default_store`](#pluggable-cache-stores)
+- [`SafeMemoize::Adapters::ConcurrentRuby` — optional `concurrent-ruby` store with parallel-read locking](#concurrent-ruby-adapter)
+- [Class-level `.safe_memoize_store=` — set a per-class default store without touching global config](#class-level-default-store-safe_memoize_store)
 - [Fiber-local memoization via `fiber_local: true` — isolated per-fiber cache, no mutex, works with Async/Falcon](#fiber-local-memoization)
 - [Ractor-safe shared cache via `ractor_safe: true` — supervisor Ractor replaces the Mutex; worker Ractors can call the memoized method directly](#ractor-safe-shared-cache)
 
@@ -992,6 +994,54 @@ end
 ```
 
 Use `SafeMemoize::Stores::Base::MISS` (a frozen sentinel object) as the return value from `read` when the key is absent — this distinguishes a cache miss from a cached `nil` or `false`.
+
+#### concurrent-ruby adapter
+
+`SafeMemoize::Adapters::ConcurrentRuby` replaces the default `Mutex`-backed store with `Concurrent::Map` and `Concurrent::ReentrantReadWriteLock` from the [`concurrent-ruby`](https://github.com/ruby-concurrency/concurrent-ruby) gem. Multiple readers proceed in parallel; writers still get exclusive access. For read-heavy hot paths this can meaningfully reduce lock contention.
+
+`concurrent-ruby` is a **soft dependency** — it is not required at runtime unless you instantiate the adapter. Add it to your own `Gemfile`:
+
+```ruby
+gem "concurrent-ruby"
+```
+
+Opt in per class:
+
+```ruby
+class HotService
+  prepend SafeMemoize
+  self.safe_memoize_store = SafeMemoize::Adapters::ConcurrentRuby.new
+
+  def expensive(id) = db.find(id)
+  memoize :expensive
+end
+```
+
+Or set it globally:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.default_store = SafeMemoize::Adapters::ConcurrentRuby.new
+end
+```
+
+A `LoadError` with an actionable message is raised at instantiation if `concurrent-ruby` is not installed. The adapter is incompatible with `max_size:` and `shared:` (same constraints as all external stores).
+
+#### Class-level default store (`safe_memoize_store=`)
+
+Set a default store for every `memoize` call on a single class without touching the global configuration:
+
+```ruby
+class ReportService
+  prepend SafeMemoize
+  self.safe_memoize_store = SafeMemoize::Adapters::ConcurrentRuby.new
+
+  def summary = compute_summary   # routed through ConcurrentRuby
+  memoize :summary
+end
+```
+
+The resolution order is: per-method `store:` → class-level `.safe_memoize_store` → global `SafeMemoize.configuration.default_store`. Assign `nil` to clear. An invalid value (not a `Stores::Base` instance) raises `ArgumentError`.
 
 #### Global default store
 

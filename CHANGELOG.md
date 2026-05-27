@@ -10,6 +10,9 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ### Added
 
+- `SafeMemoize::Adapters::ConcurrentRuby` — optional store adapter backed by `concurrent-ruby`; uses `Concurrent::Map` as the backing hash and `Concurrent::ReentrantReadWriteLock` to allow multiple readers to proceed in parallel while writers still get exclusive access; reduces lock contention on hot read paths compared to the default `Mutex`-backed `Stores::Memory`; `concurrent-ruby` is a soft dependency — a `LoadError` with an actionable message is raised at instantiation if the gem is not available
+- `.safe_memoize_store=` / `.safe_memoize_store` — class-level attribute for setting a default store on an individual class without touching the global `SafeMemoize.configure` default; takes precedence over `SafeMemoize.configuration.default_store` but is overridden by a per-method `store:` argument; accepts any `SafeMemoize::Stores::Base` instance or `nil`; raises `ArgumentError` for invalid values
+
 - `ractor_safe: true` option on `memoize` — replaces the `Mutex`-backed class-level shared cache with a supervisor `Ractor` that owns the mutable cache hash; all reads and writes are serialised through message passing so the cache is safe to use from multiple Ractors; requires `shared: true`; cached values are deep-frozen via `Ractor.make_shareable`; the memoize wrapper Proc is frozen with `Ractor.make_shareable` before being passed to `define_method` so that classes using `ractor_safe: true` can be passed directly into worker Ractors; incompatible with `if:`, `unless:`, `max_size:`, `ttl_refresh:`, `key:`, and `store:` (raises `ArgumentError`); `ttl:` is supported
 - `.reset_ractor_memo(method_name, *args, **kwargs)` — class method to clear one or all entries from the Ractor-safe shared cache for a given method
 - `.reset_all_ractor_memos` — class method to clear the entire Ractor-safe shared cache for this class
