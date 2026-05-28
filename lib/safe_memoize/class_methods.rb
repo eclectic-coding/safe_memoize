@@ -76,11 +76,30 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil, shared_cache: nil, cache_bust: nil)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil, shared_cache: nil, cache_bust: nil, **extension_options)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
         raise ArgumentError, "cannot memoize :#{method_name} — no instance method with that name is defined on #{self}"
+      end
+
+      unless extension_options.empty?
+        extension_options.each_key do |opt|
+          raise ArgumentError, "unknown memoize option :#{opt} — no registered extension handles it" unless SafeMemoize.extension_for_option(opt)
+        end
+
+        injected = {}
+        extension_options.each do |opt, val|
+          result = SafeMemoize.extension_for_option(opt).process_memoize_option(opt, val, method_name, extension_options)
+          injected.merge!(result)
+        end
+
+        ttl = injected[:ttl] if injected.key?(:ttl)
+        max_size = injected[:max_size] if injected.key?(:max_size)
+        namespace = injected[:namespace] if injected.key?(:namespace)
+        store = injected[:store] if injected.key?(:store)
+        shared_cache = injected[:shared_cache] if injected.key?(:shared_cache)
+        cache_bust = injected[:cache_bust] if injected.key?(:cache_bust)
       end
 
       visibility = memoized_method_visibility(method_name)

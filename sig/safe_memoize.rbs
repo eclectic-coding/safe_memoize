@@ -20,6 +20,8 @@ module SafeMemoize
 
   SHARED_CACHE_REGISTRY: Hash[String, Stores::Base]
   SHARED_CACHE_MUTEX: Mutex
+  EXTENSION_REGISTRY: Hash[Symbol, untyped]
+  EXTENSION_MUTEX: Mutex
 
   def self.prepended: (Class base) -> void
   def self.configure: () { (Configuration) -> void } -> void
@@ -32,6 +34,20 @@ module SafeMemoize
   def self.drop_shared_cache: (String name) -> Stores::Base?
   def self.shared_caches: () -> Hash[String, Stores::Base]
   def self.reset_shared_caches!: () -> void
+  def self.register_extension: (Symbol | String name, untyped extension) -> untyped
+  def self.unregister_extension: (Symbol | String name) -> untyped?
+  def self.extensions: () -> Hash[Symbol, untyped]
+  def self.reset_extensions!: () -> void
+  def self.extension_for_option: (Symbol option_name) -> untyped?
+  def self.dispatch_extension_events: (Symbol event_type, Class klass, Symbol method_name, untyped cache_key, untyped record) -> void
+
+  module Extension
+    def handles_option: (Symbol option_name) { (untyped value, Symbol method_name, Hash[Symbol, untyped] all_options) -> Hash[Symbol, untyped]? } -> void
+    def on_cache_event: (*Symbol event_types) { (Class klass, Symbol method_name, untyped cache_key, untyped record) -> void } -> void
+    def handled_options: () -> Array[Symbol]
+    def process_memoize_option: (Symbol option_name, untyped value, Symbol method_name, Hash[Symbol, untyped] all_options) -> Hash[Symbol, untyped]
+    def dispatch_cache_event: (Symbol event_type, Class klass, Symbol method_name, untyped cache_key, untyped record) -> void
+  end
 
   class Configuration
     attr_accessor default_ttl: Numeric?
@@ -48,7 +64,7 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, **untyped extension_options) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
     def safe_memoize_namespace: () -> String?
