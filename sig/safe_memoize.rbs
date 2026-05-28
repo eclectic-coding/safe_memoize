@@ -18,11 +18,20 @@ module SafeMemoize
   @__safe_memo_shared_mutex__: Mutex?
   @__safe_memo_shared_lru_order__: Hash[Symbol, Hash[memo_key, true]]?
 
+  SHARED_CACHE_REGISTRY: Hash[String, Stores::Base]
+  SHARED_CACHE_MUTEX: Mutex
+
   def self.prepended: (Class base) -> void
   def self.configure: () { (Configuration) -> void } -> void
   def self.configuration: () -> Configuration
   def self.reset_configuration!: () -> Configuration
   def self.deprecate: (String subject, message: String, horizon: String) -> void
+  def self.shared_cache: (String name) -> Stores::Base
+  def self.register_shared_cache: (String name, Stores::Base store) -> Stores::Base
+  def self.clear_shared_cache: (String name) -> void
+  def self.drop_shared_cache: (String name) -> Stores::Base?
+  def self.shared_caches: () -> Hash[String, Stores::Base]
+  def self.reset_shared_caches!: () -> void
 
   class Configuration
     attr_accessor default_ttl: Numeric?
@@ -39,12 +48,12 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
     def safe_memoize_namespace: () -> String?
     def safe_memoize_namespace=: (String?) -> String?
-    def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool, ?namespace: String?) -> void
+    def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool, ?namespace: String?, ?shared_cache: String?) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
     def shared_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool

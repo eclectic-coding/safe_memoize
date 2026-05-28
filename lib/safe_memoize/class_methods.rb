@@ -43,6 +43,14 @@ module SafeMemoize
     #   {#safe_memoize_namespace} and the global {SafeMemoize::Configuration#namespace}.
     #   Useful for versioning a single method independently of its peers. Must not contain
     #   the character +:+.
+    # @param shared_cache [String, nil] name of a globally-registered shared cache store
+    #   (see {SafeMemoize.shared_cache} and {SafeMemoize.register_shared_cache}). All
+    #   instances of any class that memoizes a method with the same +shared_cache:+ name
+    #   read and write the same backing store, enabling cross-class cache sharing.
+    #   The store is resolved at +memoize+ definition time; call
+    #   {SafeMemoize.register_shared_cache} before the class is loaded to supply a custom
+    #   adapter. Incompatible with +shared:+, +store:+, +fiber_local:+, +ractor_safe:+,
+    #   and +max_size:+. Composes naturally with +namespace:+, +ttl:+, +if:+, and +key:+.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -60,7 +68,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil, shared_cache: nil)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -132,6 +140,17 @@ module SafeMemoize
         raise ArgumentError, "namespace: must not be empty" if namespace.empty?
         raise ArgumentError, "namespace: must not contain ':'" if namespace.include?(":")
         __safe_memo_method_namespaces__[method_name] = namespace
+      end
+
+      if shared_cache
+        raise ArgumentError, "shared_cache: must be a String (got #{shared_cache.class})" unless shared_cache.is_a?(String)
+        raise ArgumentError, "shared_cache: must not be empty" if shared_cache.empty?
+        raise ArgumentError, "shared_cache: and shared: cannot be combined" if shared
+        raise ArgumentError, "shared_cache: and store: cannot be combined" if store
+        raise ArgumentError, "shared_cache: and fiber_local: cannot be combined" if fiber_local
+        raise ArgumentError, "shared_cache: and ractor_safe: cannot be combined" if ractor_safe
+        raise ArgumentError, "max_size: is not supported with shared_cache: — use the store adapter's own eviction" if max_size
+        store = SafeMemoize.shared_cache(shared_cache)
       end
 
       # Resolve effective store: per-method store: wins; then class-level

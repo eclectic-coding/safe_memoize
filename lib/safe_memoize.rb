@@ -54,6 +54,11 @@ module SafeMemoize
   # Rescue this to catch any error raised by the library itself.
   class Error < StandardError; end
 
+  # @api private
+  SHARED_CACHE_REGISTRY = {}
+  # @api private
+  SHARED_CACHE_MUTEX = Mutex.new
+
   include InstanceMethods
 
   # @api private
@@ -101,5 +106,69 @@ module SafeMemoize
     text = "[SafeMemoize] #{subject} is deprecated and will be removed in #{horizon}. #{message}"
     handler = configuration.on_deprecation
     handler ? handler.call(text) : warn(text)
+  end
+
+  # Returns the named shared cache store, creating a new in-process
+  # {Stores::Memory} instance if one has not been registered under +name+.
+  #
+  # Use {register_shared_cache} to supply a custom adapter (e.g. Redis) before
+  # any class that references the same name is loaded.
+  #
+  # @param name [String] the logical cache name
+  # @return [Stores::Base]
+  def self.shared_cache(name)
+    SHARED_CACHE_MUTEX.synchronize do
+      SHARED_CACHE_REGISTRY[name] ||= Stores::Memory.new
+    end
+  end
+
+  # Registers a custom store under +name+, replacing any existing entry.
+  #
+  # Must be called *before* any class that references +name+ via +shared_cache:+
+  # is loaded, because the store is captured at +memoize+ definition time.
+  #
+  # @param name [String] the logical cache name
+  # @param store [Stores::Base] any {Stores::Base} subclass instance
+  # @return [Stores::Base] the registered store
+  # @raise [ArgumentError] if +store+ is not a {Stores::Base} instance
+  def self.register_shared_cache(name, store)
+    unless store.is_a?(Stores::Base)
+      raise ArgumentError, "store must be a SafeMemoize::Stores::Base instance (got #{store.class})"
+    end
+    SHARED_CACHE_MUTEX.synchronize { SHARED_CACHE_REGISTRY[name] = store }
+  end
+
+  # Clears all entries in the named shared cache without removing it from the
+  # registry. A no-op when no cache is registered under +name+.
+  #
+  # @param name [String]
+  # @return [void]
+  def self.clear_shared_cache(name)
+    SHARED_CACHE_MUTEX.synchronize { SHARED_CACHE_REGISTRY[name]&.clear }
+  end
+
+  # Removes the named shared cache from the registry entirely.
+  # Subsequent +shared_cache(name)+ calls will create a fresh store.
+  #
+  # @param name [String]
+  # @return [Stores::Base, nil] the removed store, or +nil+ if not present
+  def self.drop_shared_cache(name)
+    SHARED_CACHE_MUTEX.synchronize { SHARED_CACHE_REGISTRY.delete(name) }
+  end
+
+  # Returns a snapshot of the current registry as a plain +Hash+.
+  #
+  # @return [Hash{String => Stores::Base}]
+  def self.shared_caches
+    SHARED_CACHE_MUTEX.synchronize { SHARED_CACHE_REGISTRY.dup }
+  end
+
+  # Removes all named shared caches from the registry.
+  #
+  # Useful in test suite +after+ hooks to prevent state leaking between examples.
+  #
+  # @return [void]
+  def self.reset_shared_caches!
+    SHARED_CACHE_MUTEX.synchronize { SHARED_CACHE_REGISTRY.clear }
   end
 end
