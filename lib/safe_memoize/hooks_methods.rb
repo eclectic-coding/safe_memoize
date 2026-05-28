@@ -49,6 +49,8 @@ module SafeMemoize
       if (client = SafeMemoize.configuration.statsd_client)
         Adapters::StatsD.dispatch(client, hook_type, cache_key, self.class.name)
       end
+
+      SafeMemoize.dispatch_extension_events(hook_type, self.class, safe_memo_bare_method_name(cache_key[0]), cache_key, record)
     end
 
     def safe_memo_notify(hook_type, cache_key)

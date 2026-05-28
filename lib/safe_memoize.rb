@@ -2,6 +2,7 @@
 
 require_relative "safe_memoize/version"
 require_relative "safe_memoize/configuration"
+require_relative "safe_memoize/extension"
 require_relative "safe_memoize/stores/base"
 require_relative "safe_memoize/stores/memory"
 require_relative "safe_memoize/adapters/statsd"
@@ -58,6 +59,11 @@ module SafeMemoize
   SHARED_CACHE_REGISTRY = {}
   # @api private
   SHARED_CACHE_MUTEX = Mutex.new
+
+  # @api private
+  EXTENSION_REGISTRY = {}
+  # @api private
+  EXTENSION_MUTEX = Mutex.new
 
   include InstanceMethods
 
@@ -170,5 +176,68 @@ module SafeMemoize
   # @return [void]
   def self.reset_shared_caches!
     SHARED_CACHE_MUTEX.synchronize { SHARED_CACHE_REGISTRY.clear }
+  end
+
+  # Registers an extension under +name+.
+  #
+  # An extension is any Ruby object that optionally responds to the
+  # {Extension} interface: {Extension#handled_options}, {Extension#process_memoize_option},
+  # and {Extension#dispatch_cache_event}. Use {Extension} as a mixin to get a
+  # convenient DSL for defining these.
+  #
+  # @param name [Symbol, String] a unique identifier for this extension
+  # @param extension [Object] the extension object or module
+  # @return [Object] the registered extension
+  def self.register_extension(name, extension)
+    EXTENSION_MUTEX.synchronize { EXTENSION_REGISTRY[name.to_sym] = extension }
+  end
+
+  # Removes an extension from the registry.
+  #
+  # @param name [Symbol, String]
+  # @return [Object, nil] the removed extension, or +nil+ if not present
+  def self.unregister_extension(name)
+    EXTENSION_MUTEX.synchronize { EXTENSION_REGISTRY.delete(name.to_sym) }
+  end
+
+  # Returns a snapshot of all registered extensions as a +Hash+.
+  #
+  # @return [Hash{Symbol => Object}]
+  def self.extensions
+    EXTENSION_MUTEX.synchronize { EXTENSION_REGISTRY.dup }
+  end
+
+  # Removes all registered extensions.
+  #
+  # Useful in test suite +after+ hooks to prevent state leaking between examples.
+  #
+  # @return [void]
+  def self.reset_extensions!
+    EXTENSION_MUTEX.synchronize { EXTENSION_REGISTRY.clear }
+  end
+
+  # Returns the first registered extension that declares it handles +option_name+,
+  # or +nil+ if none does.
+  #
+  # @param option_name [Symbol]
+  # @return [Object, nil]
+  def self.extension_for_option(option_name)
+    sym = option_name.to_sym
+    EXTENSION_MUTEX.synchronize do
+      EXTENSION_REGISTRY.values.find do |ext|
+        ext.respond_to?(:handled_options) && ext.handled_options.include?(sym)
+      end
+    end
+  end
+
+  # Dispatches a cache lifecycle event to all registered extensions that
+  # respond to +dispatch_cache_event+.
+  #
+  # @api private
+  def self.dispatch_extension_events(event_type, klass, method_name, cache_key, record)
+    exts = EXTENSION_MUTEX.synchronize { EXTENSION_REGISTRY.values.dup }
+    exts.each do |ext|
+      ext.dispatch_cache_event(event_type, klass, method_name, cache_key, record) if ext.respond_to?(:dispatch_cache_event)
+    end
   end
 end
