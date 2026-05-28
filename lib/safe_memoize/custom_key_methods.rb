@@ -19,14 +19,17 @@ module SafeMemoize
     def compute_cache_key(method_name, args, kwargs)
       method_name = method_name.to_sym
 
+      ns = __safe_memo_resolve_namespace__(method_name)
+      effective_name = ns ? :"#{ns}:#{method_name}" : method_name
+
       # Instance-level key generator takes priority over class-level
       key_block = custom_key_store[method_name] ||
         self.class.send(:__safe_memo_class_key_generators__)[method_name]
 
       if key_block
-        [method_name, key_block.call(*args, **kwargs)]
+        [effective_name, key_block.call(*args, **kwargs)]
       else
-        safe_memo_cache_key(method_name, args, kwargs)
+        safe_memo_cache_key(effective_name, args, kwargs)
       end
     end
 

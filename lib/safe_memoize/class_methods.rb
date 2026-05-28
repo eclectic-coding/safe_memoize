@@ -38,6 +38,11 @@ module SafeMemoize
     #   from worker Ractors. Requires +shared: true+. Cached values are deep-frozen via
     #   +Ractor.make_shareable+. Incompatible with +if:+, +unless:+, +max_size:+,
     #   +ttl_refresh:+, +key:+, and +store:+.
+    # @param namespace [String, nil] prefix prepended to every cache key for this method,
+    #   scoping it to a logical partition. Takes precedence over both the class-level
+    #   {#safe_memoize_namespace} and the global {SafeMemoize::Configuration#namespace}.
+    #   Useful for versioning a single method independently of its peers. Must not contain
+    #   the character +:+.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -55,7 +60,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -122,6 +127,13 @@ module SafeMemoize
         raise ArgumentError, "ractor_safe: is incompatible with store:" if store
       end
 
+      if namespace
+        raise ArgumentError, "namespace: must be a String (got #{namespace.class})" unless namespace.is_a?(String)
+        raise ArgumentError, "namespace: must not be empty" if namespace.empty?
+        raise ArgumentError, "namespace: must not contain ':'" if namespace.include?(":")
+        __safe_memo_method_namespaces__[method_name] = namespace
+      end
+
       # Resolve effective store: per-method store: wins; then class-level
       # safe_memoize_store; then global default_store. max_size: and shared:
       # are incompatible with external stores — fall back silently.
@@ -163,7 +175,7 @@ module SafeMemoize
 
             unless cached.equal?(miss)
               effective_store.write(cache_key, cached, expires_in: ttl) if ttl_refresh
-              record_cache_hit(method_name, args, kwargs)
+              record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, {value: cached, expires_at: nil, cached_at: nil})
               return cached
             end
@@ -180,7 +192,7 @@ module SafeMemoize
               call_memo_hooks(:on_store, cache_key, {value: value, expires_at: nil, cached_at: now})
             end
 
-            record_cache_miss(method_name, args, kwargs, elapsed_time)
+            record_cache_miss(cache_key, elapsed_time)
             call_memo_hooks(:on_miss, cache_key, {value: value, expires_at: nil, cached_at: now})
 
             value
@@ -210,7 +222,7 @@ module SafeMemoize
                 lru[cache_key] = true
               end
               record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
-              record_cache_hit(method_name, args, kwargs)
+              record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, record)
               memo_record_value(record)
             else
@@ -243,7 +255,7 @@ module SafeMemoize
                 call_memo_hooks(:on_store, cache_key, new_record)
               end
 
-              record_cache_miss(method_name, args, kwargs, elapsed_time)
+              record_cache_miss(cache_key, elapsed_time)
               call_memo_hooks(:on_miss, cache_key, new_record)
 
               value
@@ -288,7 +300,7 @@ module SafeMemoize
                   lru[cache_key] = true
                 end
                 record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
-                record_cache_hit(method_name, args, kwargs)
+                record_cache_hit(cache_key)
                 call_memo_hooks(:on_hit, cache_key, record)
                 record[:value]
               else
@@ -319,7 +331,7 @@ module SafeMemoize
                   call_memo_hooks(:on_store, cache_key, new_record)
                 end
 
-                record_cache_miss(method_name, args, kwargs, elapsed_time)
+                record_cache_miss(cache_key, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
 
                 value
@@ -349,7 +361,7 @@ module SafeMemoize
               if record
                 lru_touch(method_name, cache_key) if max_size
                 record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
-                record_cache_hit(method_name, args, kwargs)
+                record_cache_hit(cache_key)
                 call_memo_hooks(:on_hit, cache_key, record)
                 memo_record_value(record)
               else
@@ -365,7 +377,7 @@ module SafeMemoize
                   lru_touch(method_name, cache_key) if max_size
                   call_memo_hooks(:on_store, cache_key, new_record)
                 end
-                record_cache_miss(method_name, args, kwargs, elapsed_time)
+                record_cache_miss(cache_key, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
 
                 value
@@ -374,7 +386,7 @@ module SafeMemoize
           else
             # Fast path: check without lock
             if (record = memo_cache_record(cache_key))
-              record_cache_hit(method_name, args, kwargs)
+              record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, record)
               return memo_record_value(record)
             end
@@ -387,7 +399,7 @@ module SafeMemoize
             elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
             with_memo_lock do
-              record_cache_miss(method_name, args, kwargs, elapsed_time)
+              record_cache_miss(cache_key, elapsed_time)
               new_record = memo_cache_record(cache_key)
               call_memo_hooks(:on_store, cache_key, new_record)
               call_memo_hooks(:on_miss, cache_key, new_record)
@@ -427,6 +439,31 @@ module SafeMemoize
           "safe_memoize_store= must be a SafeMemoize::Stores::Base instance (got #{store.class})"
       end
       @__safe_memoize_store__ = store
+    end
+
+    # Returns the class-level namespace prefix, or +nil+ if not set.
+    #
+    # When set, this prefix is prepended to every cache key produced by +memoize+
+    # calls on this class that do not specify their own +namespace:+ option.
+    # The global {SafeMemoize::Configuration#namespace} is the final fallback.
+    #
+    # @return [String, nil]
+    def safe_memoize_namespace
+      @__safe_memoize_namespace__
+    end
+
+    # Sets the class-level namespace prefix.
+    #
+    # @param ns [String, nil] a non-empty string without +:+, or +nil+ to clear
+    # @return [String, nil]
+    # @raise [ArgumentError] if +ns+ is not a valid namespace string
+    def safe_memoize_namespace=(ns)
+      if ns
+        raise ArgumentError, "safe_memoize_namespace= must be a String (got #{ns.class})" unless ns.is_a?(String)
+        raise ArgumentError, "safe_memoize_namespace= must not be empty" if ns.empty?
+        raise ArgumentError, "safe_memoize_namespace= must not contain ':'" if ns.include?(":")
+      end
+      @__safe_memoize_namespace__ = ns
     end
 
     # Memoizes every eligible public instance method defined directly on the class.
@@ -470,14 +507,15 @@ module SafeMemoize
     # @return [void]
     def reset_shared_memo(method_name, *args, **kwargs)
       method_name = method_name.to_sym
-      specific_key = (args.empty? && kwargs.empty?) ? nil : [method_name, args, kwargs]
+      effective = __safe_memo_effective_key_name__(method_name)
+      specific_key = (args.empty? && kwargs.empty?) ? nil : [effective, args, kwargs]
 
       __safe_memo_shared_mutex__.synchronize do
         if specific_key
           __safe_memo_shared_cache__.delete(specific_key)
           __safe_memo_shared_lru_order__[method_name]&.delete(specific_key)
         else
-          __safe_memo_shared_cache__.delete_if { |key, _| key[0] == method_name }
+          __safe_memo_shared_cache__.delete_if { |key, _| key[0] == effective }
           __safe_memo_shared_lru_order__.delete(method_name)
         end
       end
@@ -500,7 +538,8 @@ module SafeMemoize
     # @return [Boolean]
     def shared_memoized?(method_name, *args, **kwargs)
       method_name = method_name.to_sym
-      cache_key = [method_name, args, kwargs]
+      effective = __safe_memo_effective_key_name__(method_name)
+      cache_key = [effective, args, kwargs]
 
       __safe_memo_shared_mutex__.synchronize do
         cache = @__safe_memo_shared_cache__
@@ -523,7 +562,12 @@ module SafeMemoize
         cache = @__safe_memo_shared_cache__ || {}
         now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         live = cache.reject { |_, r| r[:expires_at] && r[:expires_at] <= now }
-        method_name ? live.count { |key, _| key[0] == method_name.to_sym } : live.count
+        if method_name
+          effective = __safe_memo_effective_key_name__(method_name.to_sym)
+          live.count { |key, _| key[0] == effective }
+        else
+          live.count
+        end
       end
     end
 
@@ -536,7 +580,8 @@ module SafeMemoize
     # @return [Float, nil]
     def shared_memo_age(method_name, *args, **kwargs)
       method_name = method_name.to_sym
-      cache_key = [method_name, args, kwargs]
+      effective = __safe_memo_effective_key_name__(method_name)
+      cache_key = [effective, args, kwargs]
 
       __safe_memo_shared_mutex__.synchronize do
         cache = @__safe_memo_shared_cache__
@@ -563,7 +608,8 @@ module SafeMemoize
     # @return [Boolean]
     def shared_memo_stale?(method_name, *args, **kwargs)
       method_name = method_name.to_sym
-      cache_key = [method_name, args, kwargs]
+      effective = __safe_memo_effective_key_name__(method_name)
+      cache_key = [effective, args, kwargs]
 
       __safe_memo_shared_mutex__.synchronize do
         cache = @__safe_memo_shared_cache__
@@ -597,6 +643,21 @@ module SafeMemoize
       @__safe_memo_class_key_generators__ ||= {}
     end
 
+    def __safe_memo_method_namespaces__
+      @__safe_memo_method_namespaces__ ||= {}
+    end
+
+    # Resolves the effective first-element key sym for a given bare method name,
+    # applying the active namespace. Used by class-level cache operations where
+    # instance methods (compute_cache_key) are unavailable.
+    def __safe_memo_effective_key_name__(method_name)
+      ns_map = @__safe_memo_method_namespaces__
+      ns = (ns_map && ns_map[method_name]) ||
+        @__safe_memoize_namespace__ ||
+        SafeMemoize.configuration.namespace
+      ns ? :"#{ns}:#{method_name}" : method_name
+    end
+
     def memoized_method_visibility(method_name)
       return :private if private_method_defined?(method_name)
       return :protected if protected_method_defined?(method_name)
@@ -627,7 +688,7 @@ module SafeMemoize
             response = Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
 
             if response[:hit]
-              record_cache_hit(method_name, args, kwargs)
+              record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, response[:record])
               return response[:record][:value]
             end
@@ -653,7 +714,7 @@ module SafeMemoize
             stored = Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
             stored_record = stored[:stored]
 
-            record_cache_miss(method_name, args, kwargs, elapsed_time)
+            record_cache_miss(cache_key, elapsed_time)
             call_memo_hooks(:on_store, cache_key, stored_record)
             call_memo_hooks(:on_miss, cache_key, stored_record)
 

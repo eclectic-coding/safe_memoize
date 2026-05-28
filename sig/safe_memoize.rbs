@@ -33,15 +33,18 @@ module SafeMemoize
     attr_accessor statsd_client: untyped
     attr_accessor opentelemetry_tracer: untyped
     attr_accessor default_store: Stores::Base?
+    attr_accessor namespace: String?
 
     def initialize: () -> void
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
-    def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool) -> void
+    def safe_memoize_namespace: () -> String?
+    def safe_memoize_namespace=: (String?) -> String?
+    def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool, ?namespace: String?) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
     def shared_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
@@ -55,6 +58,7 @@ module SafeMemoize
     def __safe_memo_shared_mutex__: () -> Mutex
     def __safe_memo_shared_lru_order__: () -> Hash[Symbol, Hash[memo_key, true]]
     def __safe_memo_class_key_generators__: () -> Hash[Symbol, Proc]
+    def __safe_memo_method_namespaces__: () -> Hash[Symbol, String]
     def memoized_method_visibility: (Symbol method_name) -> Symbol
   end
 

@@ -26,7 +26,8 @@ module SafeMemoize
       method_name = method_name.to_sym
 
       with_memo_lock do
-        metrics = memo_metrics_store.select { |key, _| key[0] == method_name }
+        effective = resolve_memo_key_name(method_name)
+        metrics = memo_metrics_store.select { |key, _| key[0] == effective }
         return empty_stats.merge(method: method_name) if metrics.empty?
 
         aggregate_metrics(metrics, include_method: false).merge(method: method_name)
@@ -73,13 +74,13 @@ module SafeMemoize
       avg_time = total_misses.zero? ? 0.0 : (total_time / total_misses).round(6)
 
       entries = metrics.map do |cache_key, stats|
-        method_name, args, _kwargs = cache_key
+        effective_name, args, _kwargs = cache_key
         entry_calls = stats[:hits] + stats[:misses]
         entry_hit_rate = entry_calls.zero? ? 0.0 : (stats[:hits].to_f / entry_calls * 100).round(2)
 
         entry = {args: args, hits: stats[:hits], misses: stats[:misses],
                  hit_rate: entry_hit_rate, computation_time: stats[:total_time].round(6)}
-        entry[:method] = method_name if include_method
+        entry[:method] = safe_memo_bare_method_name(effective_name) if include_method
         entry
       end
 

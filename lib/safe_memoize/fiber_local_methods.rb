@@ -42,7 +42,8 @@ module SafeMemoize
       return unless cache
 
       if args.empty? && kwargs.empty?
-        cache.delete_if { |key, _| key[0] == method_name }
+        effective = resolve_memo_key_name(method_name)
+        cache.delete_if { |key, _| key[0] == effective }
         fiber_memo_lru_or_nil&.delete(method_name)
       else
         cache_key = compute_cache_key(method_name, args, kwargs)
