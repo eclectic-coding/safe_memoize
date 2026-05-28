@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-28
+
 ### Added
 
 - `SafeMemoize::Extension` — mixin for building SafeMemoize extensions. Extend it in any module to get a DSL for declaring custom `memoize` options and global lifecycle event handlers without monkey-patching SafeMemoize internals.
