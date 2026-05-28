@@ -8,6 +8,15 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- `namespace:` option on `memoize` — a String prefix scoped to a single method; prepended to the cache key's first element so that entries with different namespaces never collide, even when sharing the same store or the same per-instance hash. Must be a non-empty string without `:`. Useful for versioning one method independently of its peers.
+- `.safe_memoize_namespace` / `.safe_memoize_namespace=` — class-level namespace attribute; applies to every `memoize` call on the class that does not specify its own `namespace:` option. Takes precedence over the global `SafeMemoize::Configuration#namespace`.
+- `SafeMemoize::Configuration#namespace` — global namespace prefix applied to every `memoize` call site that has no per-method or class-level namespace set. Set via `SafeMemoize.configure { |c| c.namespace = "v1" }`. Useful for versioned deployments and multi-tenant setups. Cleared by `reset_configuration!`.
+- Resolution priority: per-method `namespace:` > class `.safe_memoize_namespace` > global `Configuration#namespace`.
+- All introspection methods (`memoized?`, `memo_count`, `memo_keys`, `memo_values`, `reset_memo`, `reset_all_memos`, `dump_memo`, `cache_stats_for`, `cache_metrics_reset`, shared-cache equivalents, etc.) accept the bare method name regardless of which namespace tier is active; the `:method` field in projections always returns the bare method name.
+- Ractor-safe: namespace resolution uses `instance_variable_get` (read-only) so worker Ractors can call `compute_cache_key` without triggering unshareable class-level ivar initialization.
+
 ## [1.2.0] - 2026-05-27
 
 ### Added

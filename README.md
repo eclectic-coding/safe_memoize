@@ -73,6 +73,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Class-level `.safe_memoize_store=` — set a per-class default store without touching global config](#class-level-default-store-safe_memoize_store)
 - [Fiber-local memoization via `fiber_local: true` — isolated per-fiber cache, no mutex, works with Async/Falcon](#fiber-local-memoization)
 - [Ractor-safe shared cache via `ractor_safe: true` — supervisor Ractor replaces the Mutex; worker Ractors can call the memoized method directly](#ractor-safe-shared-cache)
+- [Cache namespacing — per-method `namespace:`, class-level `.safe_memoize_namespace=`, and global `Configuration#namespace` for multi-tenant and versioned deployments](#cache-namespacing)
 
 ## Installation
 
@@ -729,6 +730,67 @@ Metrics are per-instance and reset independently from the cache itself — clear
 
 [↑ Back to features](#features)
 
+### Cache namespacing
+
+Namespacing adds a string prefix to every cache key, scoping entries to a logical partition. It is transparent to the rest of the API — introspection methods always accept and return bare method names regardless of the active namespace.
+
+Namespacing is particularly useful for:
+
+- **Versioned deployments** — change the namespace to instantly invalidate all in-flight cached values without flushing the whole store.
+- **Multi-tenant applications** — scope keys per tenant so different tenants' data cannot collide, even when sharing the same in-process hash or external store.
+
+#### Per-method namespace
+
+Pass `namespace:` to a single `memoize` call:
+
+```ruby
+class ApiClient
+  prepend SafeMemoize
+
+  def fetch(id) = http_get(id)
+  memoize :fetch, namespace: "v2"  # keys: [:"v2:fetch", [id], {}]
+end
+```
+
+#### Class-level namespace
+
+Set `.safe_memoize_namespace=` to apply a namespace to every `memoize` call on the class that doesn't specify its own:
+
+```ruby
+class OrderService
+  prepend SafeMemoize
+  self.safe_memoize_namespace = "orders"
+
+  def find(id) = Order.find(id)
+  memoize :find                       # keys: [:"orders:find", ...]
+
+  def stats = compute_stats
+  memoize :stats, namespace: "v2"     # per-method wins → [:"v2:stats", ...]
+end
+```
+
+#### Global namespace
+
+Set via `SafeMemoize.configure` to apply a namespace to every memoized method in the process that has no per-method or class-level namespace:
+
+```ruby
+SafeMemoize.configure do |c|
+  c.namespace = "v1.2.3"   # bump this string on each deploy to bust all cached values
+end
+```
+
+#### Resolution priority
+
+`namespace:` option on `memoize` > `.safe_memoize_namespace` on the class > `SafeMemoize.configuration.namespace`
+
+#### Constraints
+
+- Namespace strings must be non-empty and must not contain `:`.
+- Namespacing works with all memoize paths (standard, `store:`, `fiber_local:`, `shared:`, `ractor_safe:`).
+- Adding or changing a namespace changes the cache keys, so existing entries become unreachable (they expire naturally or can be cleared by `reset_all_memos`).
+
+[↑ Back to features](#features)
+
 ### Global configuration
 
 Use `SafeMemoize.configure` to set defaults that apply to all subsequently memoized methods. Per-call options always take precedence over global defaults.
@@ -746,7 +808,7 @@ Both settings apply at definition time — methods already memoized before `conf
 SafeMemoize.reset_configuration!
 ```
 
-The configure block also accepts `on_hook_error`, `on_deprecation`, `active_support_notifications`, `statsd_client`, and `default_store` (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), [ActiveSupport::Notifications](#activesupportnotifications), [StatsD](#statsd), and [Pluggable cache stores](#pluggable-cache-stores)).
+The configure block also accepts `on_hook_error`, `on_deprecation`, `active_support_notifications`, `statsd_client`, `default_store`, and `namespace` (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), [ActiveSupport::Notifications](#activesupportnotifications), [StatsD](#statsd), [Pluggable cache stores](#pluggable-cache-stores), and [Cache namespacing](#cache-namespacing)).
 
 [↑ Back to features](#features)
 
@@ -1237,6 +1299,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `store:` | `Stores::Base \| nil` | `nil` | External cache store adapter; incompatible with `max_size:` and `shared:` |
 | `fiber_local:` | `Boolean` | `false` | Fiber-local cache; each fiber gets an isolated store; incompatible with `shared:` and `store:` |
 | `ractor_safe:` | `Boolean` | `false` | Supervisor-Ractor shared cache; replaces the `Mutex`; worker Ractors can call the method; requires `shared: true`; cached values are deep-frozen; incompatible with `if:`, `unless:`, `max_size:`, `ttl_refresh:`, `key:`, and `store:` |
+| `namespace:` | `String \| nil` | `nil` | Namespace prefix prepended to the cache key's first element; must not contain `:`; takes precedence over the class-level and global namespace |
 
 ### `memoize_all` options (class method)
 
@@ -1350,6 +1413,7 @@ All `memoize` option keys above, plus:
 | `statsd_client` | `Object \| nil` | `nil` |
 | `opentelemetry_tracer` | `Object \| nil` | `nil` |
 | `default_store` | `Stores::Base \| nil` | `nil` |
+| `namespace` | `String \| nil` | `nil` |
 
 ### Store adapter classes (v1.1.0+)
 
