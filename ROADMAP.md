@@ -12,7 +12,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 |---|---|---|
 | Plugin / extension architecture | A formal `SafeMemoize::Extension` API so third-party gems can add new options, hooks, or store adapters without monkey-patching | Planned |
 | DSL refinements | Evaluate alternative syntax proposals (`memoize_method`, block form, annotation approach) based on community feedback; introduce the preferred form with a migration path from the current API | Planned |
-| Cross-instance cache sharing | Beyond the class-level `shared: true`, support explicitly named shared caches that span unrelated classes | Planned |
+| Cross-instance cache sharing | Beyond the class-level `shared: true`, support explicitly named shared caches that span unrelated classes | Shipped |
 | Cache namespacing | Allow a namespace prefix on all keys for multi-tenant or versioned deployments (especially useful with external stores) | Shipped |
 | Automatic cache busting | Optional integration with ActiveRecord's `updated_at` timestamp so object mutations automatically invalidate their own cached entries | Planned |
 

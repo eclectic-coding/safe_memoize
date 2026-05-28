@@ -74,6 +74,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Fiber-local memoization via `fiber_local: true` — isolated per-fiber cache, no mutex, works with Async/Falcon](#fiber-local-memoization)
 - [Ractor-safe shared cache via `ractor_safe: true` — supervisor Ractor replaces the Mutex; worker Ractors can call the memoized method directly](#ractor-safe-shared-cache)
 - [Cache namespacing — per-method `namespace:`, class-level `.safe_memoize_namespace=`, and global `Configuration#namespace` for multi-tenant and versioned deployments](#cache-namespacing)
+- [Named shared caches via `shared_cache: "name"` — cross-class cache sharing backed by a globally-registered store](#named-shared-caches)
 
 ## Installation
 
@@ -730,6 +731,77 @@ Metrics are per-instance and reset independently from the cache itself — clear
 
 [↑ Back to features](#features)
 
+### Named shared caches
+
+`shared_cache: "name"` routes all cache reads and writes through a globally-registered store, letting unrelated classes share the same cached data without any object-level coordination.
+
+```ruby
+class OrderService
+  prepend SafeMemoize
+
+  def find(id) = Order.find(id)
+  memoize :find, shared_cache: "orders"
+end
+
+class OrderPresenter
+  prepend SafeMemoize
+
+  def find(id) = Order.find(id)          # same method signature
+  memoize :find, shared_cache: "orders"  # same backing store
+end
+
+# After OrderService.new.find(42) computes the value, OrderPresenter.new.find(42)
+# returns the cached result — the method body is not called a second time.
+```
+
+#### Registry API
+
+```ruby
+SafeMemoize.shared_cache("orders")                           # get or auto-create a Memory store
+SafeMemoize.register_shared_cache("orders", my_redis_store)  # use a custom adapter
+SafeMemoize.clear_shared_cache("orders")                     # evict all entries
+SafeMemoize.drop_shared_cache("orders")                      # remove from registry
+SafeMemoize.shared_caches                                    # { "orders" => #<Memory>, … }
+SafeMemoize.reset_shared_caches!                             # wipe registry (test teardown)
+```
+
+#### Custom adapter
+
+Register a Redis-backed (or any `Stores::Base`) store **before** any class that references the name is loaded — the store is captured at `memoize` definition time:
+
+```ruby
+# config/initializers/safe_memoize.rb
+require "safe_memoize/stores/redis"
+
+SafeMemoize.register_shared_cache(
+  "orders",
+  SafeMemoize::Stores::Redis.new(Redis.new, namespace: "myapp:orders")
+)
+```
+
+#### Key scoping and namespace composition
+
+By default two classes sharing the same cache name and method name share the same key:
+
+```ruby
+# OrderService#find(42) and OrderPresenter#find(42) → same key [:find, [42], {}]
+```
+
+Add `namespace:` when you want class-scoped entries within the same store:
+
+```ruby
+memoize :find, shared_cache: "orders", namespace: "service"    # [:"service:find", [42], {}]
+memoize :find, shared_cache: "orders", namespace: "presenter"  # [:"presenter:find", [42], {}]
+```
+
+#### Constraints
+
+- Incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:` (use the store adapter's own eviction policy).
+- `register_shared_cache` must be called before the class that uses the name is defined.
+- Test suites should call `SafeMemoize.reset_shared_caches!` in an `after` hook to prevent state leaking between examples.
+
+[↑ Back to features](#features)
+
 ### Cache namespacing
 
 Namespacing adds a string prefix to every cache key, scoping entries to a logical partition. It is transparent to the rest of the API — introspection methods always accept and return bare method names regardless of the active namespace.
@@ -1284,6 +1356,12 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `SafeMemoize.configuration` | module method | Returns the current `Configuration` |
 | `SafeMemoize.reset_configuration!` | module method | Restores all configuration to defaults |
 | `SafeMemoize.deprecate(subject, message:, horizon:)` | module method | Emits a structured deprecation warning |
+| `SafeMemoize.shared_cache(name)` | module method | Returns named store, auto-creating a `Memory` store if absent |
+| `SafeMemoize.register_shared_cache(name, store)` | module method | Registers a custom `Stores::Base` under a name |
+| `SafeMemoize.clear_shared_cache(name)` | module method | Evicts all entries from the named store |
+| `SafeMemoize.drop_shared_cache(name)` | module method | Removes the named store from the registry |
+| `SafeMemoize.shared_caches` | module method | Returns a snapshot of the registry |
+| `SafeMemoize.reset_shared_caches!` | module method | Clears the entire registry (test teardown) |
 
 ### `memoize` DSL (class method, added by `prepend SafeMemoize`)
 
@@ -1300,6 +1378,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `fiber_local:` | `Boolean` | `false` | Fiber-local cache; each fiber gets an isolated store; incompatible with `shared:` and `store:` |
 | `ractor_safe:` | `Boolean` | `false` | Supervisor-Ractor shared cache; replaces the `Mutex`; worker Ractors can call the method; requires `shared: true`; cached values are deep-frozen; incompatible with `if:`, `unless:`, `max_size:`, `ttl_refresh:`, `key:`, and `store:` |
 | `namespace:` | `String \| nil` | `nil` | Namespace prefix prepended to the cache key's first element; must not contain `:`; takes precedence over the class-level and global namespace |
+| `shared_cache:` | `String \| nil` | `nil` | Name of a globally-registered shared store; incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:` |
 
 ### `memoize_all` options (class method)
 
