@@ -29,7 +29,13 @@ module SafeMemoize
       if key_block
         [effective_name, key_block.call(*args, **kwargs)]
       else
-        safe_memo_cache_key(effective_name, args, kwargs)
+        bust_block = self.class.send(:__safe_memo_class_cache_bust_generators__)[method_name]
+        if bust_block
+          token = bust_block.is_a?(Symbol) ? send(bust_block) : instance_exec(&bust_block)
+          [effective_name, [deep_freeze_copy(args), deep_freeze_copy(kwargs), token]]
+        else
+          safe_memo_cache_key(effective_name, args, kwargs)
+        end
       end
     end
 

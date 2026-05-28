@@ -43,6 +43,14 @@ module SafeMemoize
     #   {#safe_memoize_namespace} and the global {SafeMemoize::Configuration#namespace}.
     #   Useful for versioning a single method independently of its peers. Must not contain
     #   the character +:+.
+    # @param cache_bust [Proc, Symbol, nil] callable invoked on the instance (via
+    #   +instance_exec+) on every cache lookup to obtain a version token. The token is
+    #   folded into the cache key alongside the normal arguments, so when the token
+    #   changes (e.g. an ActiveRecord +updated_at+ timestamp advances after a +save+)
+    #   the old key no longer matches any entry — the method is recomputed and the result
+    #   stored under the new key. Accepts any callable (+Proc+, +lambda+, +Method+) that
+    #   takes no arguments, or a +Symbol+ naming an instance method. Cannot be combined
+    #   with +key:+.
     # @param shared_cache [String, nil] name of a globally-registered shared cache store
     #   (see {SafeMemoize.shared_cache} and {SafeMemoize.register_shared_cache}). All
     #   instances of any class that memoizes a method with the same +shared_cache:+ name
@@ -68,7 +76,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil, shared_cache: nil)
+    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil, shared_cache: nil, cache_bust: nil)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -114,6 +122,13 @@ module SafeMemoize
       raise ArgumentError, ":if must be callable" if cond_if && !cond_if.respond_to?(:call)
       raise ArgumentError, ":unless must be callable" if cond_unless && !cond_unless.respond_to?(:call)
       raise ArgumentError, ":key must be callable" if key && !key.respond_to?(:call)
+
+      if cache_bust
+        unless cache_bust.respond_to?(:call) || cache_bust.is_a?(Symbol)
+          raise ArgumentError, "cache_bust: must be a callable or Symbol (got #{cache_bust.class})"
+        end
+        raise ArgumentError, "cache_bust: and key: cannot be combined" if key
+      end
 
       if store
         raise ArgumentError, "store: must be a SafeMemoize::Stores::Base instance (got #{store.class})" unless store.is_a?(SafeMemoize::Stores::Base)
@@ -174,6 +189,7 @@ module SafeMemoize
       end
 
       __safe_memo_class_key_generators__[method_name] = key if key
+      __safe_memo_class_cache_bust_generators__[method_name] = cache_bust if cache_bust
 
       # Normalize to a single "should cache?" predicate
       condition = if cond_if
@@ -664,6 +680,10 @@ module SafeMemoize
 
     def __safe_memo_method_namespaces__
       @__safe_memo_method_namespaces__ ||= {}
+    end
+
+    def __safe_memo_class_cache_bust_generators__
+      @__safe_memo_class_cache_bust_generators__ ||= {}
     end
 
     # Resolves the effective first-element key sym for a given bare method name,
