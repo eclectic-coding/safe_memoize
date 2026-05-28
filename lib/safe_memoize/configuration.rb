@@ -48,6 +48,13 @@ module SafeMemoize
     #   store and will silently continue using the per-instance hash even when this is set.
     attr_accessor :default_store
 
+    # @return [String, nil] Global namespace prefix applied to every cache key produced by
+    #   {ClassMethods#memoize}. Useful for versioned deployments (change the namespace to
+    #   bust all in-flight cached values) and multi-tenant setups (scope keys to a tenant
+    #   identifier). A class-level {ClassMethods#safe_memoize_namespace} or a per-method
+    #   +namespace:+ option takes precedence over this value. +nil+ means no prefix.
+    attr_accessor :namespace
+
     # @api private
     def initialize
       @default_ttl = nil
@@ -58,6 +65,7 @@ module SafeMemoize
       @statsd_client = nil
       @opentelemetry_tracer = nil
       @default_store = nil
+      @namespace = nil
     end
   end
 end

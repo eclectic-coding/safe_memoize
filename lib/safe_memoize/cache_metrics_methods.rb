@@ -9,15 +9,13 @@ module SafeMemoize
       @__safe_memo_metrics__ ||= {}
     end
 
-    def record_cache_hit(method_name, args, kwargs)
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+    def record_cache_hit(cache_key)
       metrics = memo_metrics_store
       metrics[cache_key] ||= {hits: 0, misses: 0, total_time: 0.0}
       metrics[cache_key][:hits] += 1
     end
 
-    def record_cache_miss(method_name, args, kwargs, computation_time)
-      cache_key = safe_memo_cache_key(method_name, args, kwargs)
+    def record_cache_miss(cache_key, computation_time)
       metrics = memo_metrics_store
       metrics[cache_key] ||= {hits: 0, misses: 0, total_time: 0.0}
       metrics[cache_key][:misses] += 1
@@ -31,7 +29,8 @@ module SafeMemoize
     def _reset_cache_metrics_for(method_name)
       return unless defined?(@__safe_memo_metrics__) && @__safe_memo_metrics__
 
-      @__safe_memo_metrics__.delete_if { |key, _| key[0] == method_name }
+      effective = resolve_memo_key_name(method_name)
+      @__safe_memo_metrics__.delete_if { |key, _| key[0] == effective }
     end
   end
 end

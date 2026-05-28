@@ -214,7 +214,8 @@ module SafeMemoize
 
       with_memo_lock do
         cache = memo_cache_or_nil || {}
-        entries = method_name ? cache.select { |key, _| key[0] == method_name } : cache.dup
+        effective = method_name && resolve_memo_key_name(method_name)
+        entries = effective ? cache.select { |key, _| key[0] == effective } : cache.dup
         entries.select! { |_, record| memo_record_live?(record) }
         entries.transform_values { |record| memo_record_value(record) }
       end
@@ -401,7 +402,7 @@ module SafeMemoize
 
         age = (now - record[:cached_at]).round(6) if record[:cached_at]
 
-        metrics_key = safe_memo_cache_key(method_name, args, kwargs)
+        metrics_key = compute_cache_key(method_name, args, kwargs)
         entry_metrics = memo_metrics_store[metrics_key] || {hits: 0, misses: 0}
 
         custom_key = (cache_key.length == 2) ? cache_key[1] : nil

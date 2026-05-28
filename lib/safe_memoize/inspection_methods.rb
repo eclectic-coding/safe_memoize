@@ -13,7 +13,8 @@ module SafeMemoize
 
     def memo_matcher_for(method_name, args, kwargs)
       if args.empty? && kwargs.empty?
-        ->(key) { key[0] == method_name }
+        effective = resolve_memo_key_name(method_name)
+        ->(key) { key[0] == effective }
       else
         cache_key = compute_cache_key(method_name, args, kwargs)
         ->(key) { key == cache_key }
@@ -28,7 +29,8 @@ module SafeMemoize
       entries = cache.to_a
       return entries unless method_name
 
-      entries.select { |(cache_key, _)| cache_key[0] == method_name }
+      effective = resolve_memo_key_name(method_name)
+      entries.select { |(cache_key, _)| cache_key[0] == effective }
     end
 
     def safe_memo_count_for(method_name)
@@ -57,20 +59,47 @@ module SafeMemoize
       # Custom keys are [method, custom_key] (2 elements); default keys are
       # [method, args, kwargs] (3 elements). Detect and surface accordingly.
       if cache_key.length == 2
-        method_name, custom_key = cache_key
+        effective_name, custom_key = cache_key
         payload = {custom_key: custom_key}
       else
-        method_name, args, kwargs = cache_key
+        effective_name, args, kwargs = cache_key
         payload = {args: args, kwargs: kwargs}
       end
 
-      payload[:method] = method_name if include_method
+      payload[:method] = safe_memo_bare_method_name(effective_name) if include_method
       payload[:value] = memo_record_value(value) if include_value
       payload
     end
 
     def safe_memo_cache_key(method_name, args, kwargs)
       [method_name.to_sym, deep_freeze_copy(args), deep_freeze_copy(kwargs)]
+    end
+
+    # Returns the active namespace string for a bare method name, or nil.
+    # Priority: per-method namespace: option > class safe_memoize_namespace > global.
+    #
+    # Uses instance_variable_get throughout so this is safe to call from worker
+    # Ractors (reads only; lazy-init ivars must not be triggered in that context).
+    def __safe_memo_resolve_namespace__(method_name)
+      ns_map = self.class.instance_variable_get(:@__safe_memo_method_namespaces__)
+      (ns_map && ns_map[method_name]) ||
+        self.class.instance_variable_get(:@__safe_memoize_namespace__) ||
+        SafeMemoize.instance_variable_get(:@configuration)&.namespace
+    end
+
+    # Returns the effective cache key sym for a bare method name, applying any
+    # active namespace (per-method > class-level > global).
+    def resolve_memo_key_name(method_name)
+      ns = __safe_memo_resolve_namespace__(method_name)
+      ns ? :"#{ns}:#{method_name}" : method_name
+    end
+
+    # Strips the namespace prefix from an effective key sym, returning the bare
+    # method name. When no namespace is present the sym is returned unchanged.
+    def safe_memo_bare_method_name(key_sym)
+      s = key_sym.to_s
+      colon_idx = s.index(":")
+      colon_idx ? s[(colon_idx + 1)..].to_sym : key_sym
     end
 
     def deep_freeze_copy(obj)
