@@ -75,6 +75,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Ractor-safe shared cache via `ractor_safe: true` — supervisor Ractor replaces the Mutex; worker Ractors can call the memoized method directly](#ractor-safe-shared-cache)
 - [Cache namespacing — per-method `namespace:`, class-level `.safe_memoize_namespace=`, and global `Configuration#namespace` for multi-tenant and versioned deployments](#cache-namespacing)
 - [Named shared caches via `shared_cache: "name"` — cross-class cache sharing backed by a globally-registered store](#named-shared-caches)
+- [Automatic cache busting via `cache_bust:` — version-token-based invalidation; works with ActiveRecord `updated_at` and any comparable value](#automatic-cache-busting)
 
 ## Installation
 
@@ -731,6 +732,67 @@ Metrics are per-instance and reset independently from the cache itself — clear
 
 [↑ Back to features](#features)
 
+### Automatic cache busting
+
+`cache_bust:` ties a method's cache lifetime to a version token derived from instance state. When the token changes, the old cache key no longer matches — the method is recomputed automatically, with no explicit `reset_memo` required.
+
+```ruby
+class OrderDecorator
+  prepend SafeMemoize
+
+  def initialize(order)
+    @order = order
+  end
+
+  def summary = expensive_compute(@order)
+  memoize :summary, cache_bust: -> { @order.updated_at }
+  # Saving @order advances updated_at → next call is a cache miss → fresh result
+end
+```
+
+#### Token forms
+
+```ruby
+# Proc/lambda — instance_exec gives full access to self, ivars, and methods
+memoize :report, cache_bust: -> { @record.updated_at }
+
+# Symbol — calls the named instance method
+memoize :data,   cache_bust: :cache_version
+
+# Compound token — any comparable value works, including arrays
+memoize :stats,  cache_bust: -> { [@version, tenant_id] }
+```
+
+#### How it works
+
+The token is incorporated into the cache key alongside the normal arguments. When the token changes, the old key simply produces no match — there is no deletion. Stale entries accumulate silently until:
+- They expire via `ttl:`, or
+- They are evicted by the store adapter's own eviction policy, or
+- You call `reset_memo(:method_name)` or `reset_all_memos` explicitly.
+
+For unbounded caches, pair with `ttl:` or a `max_size:`-capable store to limit memory growth:
+
+```ruby
+memoize :summary, cache_bust: -> { @order.updated_at }, ttl: 3600
+```
+
+#### Introspection
+
+All introspection methods work with the **current** token:
+
+```ruby
+obj.memoized?(:summary)       # true only if the current token's entry is live
+obj.memo_count(:summary)      # counts ALL live versions (current + stale)
+obj.reset_memo(:summary)      # clears ALL versions
+```
+
+#### Constraints
+
+- Incompatible with `key:` — both define the cache key shape; raises `ArgumentError` at `memoize` time.
+- Composes with `namespace:`, `ttl:`, `if:`, `unless:`, and `shared_cache:`.
+
+[↑ Back to features](#features)
+
 ### Named shared caches
 
 `shared_cache: "name"` routes all cache reads and writes through a globally-registered store, letting unrelated classes share the same cached data without any object-level coordination.
@@ -1379,6 +1441,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `ractor_safe:` | `Boolean` | `false` | Supervisor-Ractor shared cache; replaces the `Mutex`; worker Ractors can call the method; requires `shared: true`; cached values are deep-frozen; incompatible with `if:`, `unless:`, `max_size:`, `ttl_refresh:`, `key:`, and `store:` |
 | `namespace:` | `String \| nil` | `nil` | Namespace prefix prepended to the cache key's first element; must not contain `:`; takes precedence over the class-level and global namespace |
 | `shared_cache:` | `String \| nil` | `nil` | Name of a globally-registered shared store; incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:` |
+| `cache_bust:` | `Proc \| Symbol \| nil` | `nil` | Version-token callable; invoked on the instance at each lookup; token is folded into the key; incompatible with `key:` |
 
 ### `memoize_all` options (class method)
 
