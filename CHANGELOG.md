@@ -10,6 +10,14 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ### Added
 
+- `shared_cache: "name"` option on `memoize` — routes all reads and writes through a globally-registered named `Stores::Base` instance, enabling cross-class cache sharing. Any number of unrelated classes can share the same backing store by referencing the same name. The store is resolved at `memoize` definition time via `SafeMemoize.shared_cache("name")`, which auto-creates a `Stores::Memory` instance on first access; supply a custom adapter (Redis, RailsCache, etc.) by calling `SafeMemoize.register_shared_cache("name", store)` before any class that references the name is loaded. Incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:`; composes naturally with `namespace:`, `ttl:`, `if:`, `unless:`, and `key:`.
+- `SafeMemoize.shared_cache(name)` — returns the `Stores::Base` instance for the given name, creating a new `Stores::Memory` if none is registered.
+- `SafeMemoize.register_shared_cache(name, store)` — registers a custom `Stores::Base` instance under a name; must be called before any class that uses that name via `shared_cache:` is loaded.
+- `SafeMemoize.clear_shared_cache(name)` — calls `clear` on the named store, evicting all entries. No-op for unregistered names.
+- `SafeMemoize.drop_shared_cache(name)` — removes the named store from the registry; subsequent `shared_cache(name)` calls will auto-create a new `Memory` store.
+- `SafeMemoize.shared_caches` — returns a dup of the current registry as a `Hash{String => Stores::Base}`.
+- `SafeMemoize.reset_shared_caches!` — clears the entire registry; useful in test-suite `after` hooks to prevent state leaking between examples.
+
 - `namespace:` option on `memoize` — a String prefix scoped to a single method; prepended to the cache key's first element so that entries with different namespaces never collide, even when sharing the same store or the same per-instance hash. Must be a non-empty string without `:`. Useful for versioning one method independently of its peers.
 - `.safe_memoize_namespace` / `.safe_memoize_namespace=` — class-level namespace attribute; applies to every `memoize` call on the class that does not specify its own `namespace:` option. Takes precedence over the global `SafeMemoize::Configuration#namespace`.
 - `SafeMemoize::Configuration#namespace` — global namespace prefix applied to every `memoize` call site that has no per-method or class-level namespace set. Set via `SafeMemoize.configure { |c| c.namespace = "v1" }`. Useful for versioned deployments and multi-tenant setups. Cleared by `reset_configuration!`.
