@@ -76,6 +76,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Cache namespacing — per-method `namespace:`, class-level `.safe_memoize_namespace=`, and global `Configuration#namespace` for multi-tenant and versioned deployments](#cache-namespacing)
 - [Named shared caches via `shared_cache: "name"` — cross-class cache sharing backed by a globally-registered store](#named-shared-caches)
 - [Automatic cache busting via `cache_bust:` — version-token-based invalidation; works with ActiveRecord `updated_at` and any comparable value](#automatic-cache-busting)
+- [Plugin / extension architecture — `SafeMemoize::Extension` DSL for adding custom `memoize` options and global lifecycle handlers without monkey-patching](#plugin--extension-architecture)
 
 ## Installation
 
@@ -729,6 +730,89 @@ obj.cache_metrics_reset(:find)    # Clears metrics for one method only
 ```
 
 Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
+
+[↑ Back to features](#features)
+
+### Plugin / extension architecture
+
+`SafeMemoize::Extension` lets third-party gems add custom `memoize` options and global lifecycle handlers without monkey-patching SafeMemoize internals.
+
+```ruby
+module MyExtension
+  extend SafeMemoize::Extension
+
+  # Declare a custom memoize option.
+  # The processor block runs at memoize definition time and returns
+  # a Hash of standard memoize options to inject.
+  handles_option :active_record_bust do |_value, _method_name, _options|
+    { cache_bust: -> { send(:updated_at) } }
+  end
+
+  # Register a global lifecycle handler (fires for every memoized method).
+  on_cache_event :miss do |klass, method_name, _cache_key, _record|
+    Rails.logger.debug "cache miss: #{klass}##{method_name}"
+  end
+end
+
+SafeMemoize.register_extension(:active_record_bust, MyExtension)
+```
+
+Once registered, the custom option is accepted by `memoize`:
+
+```ruby
+class OrderDecorator
+  prepend SafeMemoize
+
+  def initialize(order) = (@order = order)
+
+  def summary = expensive_compute(@order)
+  memoize :summary, active_record_bust: true
+  # ↑ MyExtension injects cache_bust: -> { updated_at } automatically
+end
+```
+
+#### `handles_option` processor return values
+
+The processor block must return a Hash of **standard** `memoize` option keys to inject. Any standard option is supported:
+
+```ruby
+handles_option :short_lived  do |ttl, _, _| { ttl: ttl }        end
+handles_option :versioned    do |ns,  _, _| { namespace: ns }    end
+handles_option :via_redis    do |store, _, _| { store: store }   end
+handles_option :bust_on      do |fn,  _, _| { cache_bust: fn }   end
+```
+
+#### `on_cache_event` handler signature
+
+```ruby
+on_cache_event :on_hit, :on_miss do |klass, method_name, cache_key, record|
+  # klass       — the class whose instance triggered the event
+  # method_name — bare Symbol (namespace stripped)
+  # cache_key   — full cache key Array
+  # record      — { value:, expires_at:, cached_at: } or nil
+end
+```
+
+Valid event types: `:on_hit`, `:on_miss`, `:on_store`, `:on_expire`, `:on_evict`.
+
+#### Registry API
+
+```ruby
+SafeMemoize.register_extension(:name, MyExtension)
+SafeMemoize.unregister_extension(:name)
+SafeMemoize.extensions               # { name: MyExtension, … }
+SafeMemoize.reset_extensions!        # clear registry (test teardown)
+SafeMemoize.extension_for_option(:active_record_bust)  # → MyExtension
+```
+
+#### Duck-type compatibility
+
+An extension does not need to `extend SafeMemoize::Extension`. Any object responding to `handled_options`, `process_memoize_option`, and `dispatch_cache_event` is accepted.
+
+#### Constraints
+
+- Unknown `memoize` keywords raise `ArgumentError` unless a registered extension claims them — typos are still caught.
+- `on_cache_event` handlers run on the main Ractor only; they are silently skipped from worker Ractors.
 
 [↑ Back to features](#features)
 
@@ -1424,6 +1508,11 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `SafeMemoize.drop_shared_cache(name)` | module method | Removes the named store from the registry |
 | `SafeMemoize.shared_caches` | module method | Returns a snapshot of the registry |
 | `SafeMemoize.reset_shared_caches!` | module method | Clears the entire registry (test teardown) |
+| `SafeMemoize.register_extension(name, ext)` | module method | Registers a plugin extension |
+| `SafeMemoize.unregister_extension(name)` | module method | Removes an extension |
+| `SafeMemoize.extensions` | module method | Returns snapshot of extension registry |
+| `SafeMemoize.reset_extensions!` | module method | Clears all extensions (test teardown) |
+| `SafeMemoize.extension_for_option(name)` | module method | Returns the extension handling the named option |
 
 ### `memoize` DSL (class method, added by `prepend SafeMemoize`)
 
@@ -1442,6 +1531,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `namespace:` | `String \| nil` | `nil` | Namespace prefix prepended to the cache key's first element; must not contain `:`; takes precedence over the class-level and global namespace |
 | `shared_cache:` | `String \| nil` | `nil` | Name of a globally-registered shared store; incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:` |
 | `cache_bust:` | `Proc \| Symbol \| nil` | `nil` | Version-token callable; invoked on the instance at each lookup; token is folded into the key; incompatible with `key:` |
+| *(extension options)* | any | — | Unknown kwargs are validated against registered extensions; raise `ArgumentError` if unclaimed |
 
 ### `memoize_all` options (class method)
 
