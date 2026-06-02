@@ -2160,6 +2160,45 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "write failure" do
+      it "records the failure and does not re-raise" do
+        allow(inner_store).to receive(:write).and_raise(RuntimeError, "write error")
+        expect { cb.write(:k, "v") }.not_to raise_error
+        expect(cb.error_count).to eq(1)
+      end
+
+      it "trips the circuit after threshold write failures" do
+        allow(inner_store).to receive(:write).and_raise(RuntimeError)
+        3.times { cb.write(:k, "v") }
+        expect(cb.state).to eq(:open)
+      end
+    end
+
+    context "delete failure" do
+      it "records the failure and does not re-raise" do
+        allow(inner_store).to receive(:delete).and_raise(RuntimeError, "delete error")
+        expect { cb.delete(:k) }.not_to raise_error
+        expect(cb.error_count).to eq(1)
+      end
+    end
+
+    context "clear failure" do
+      it "records the failure and does not re-raise" do
+        allow(inner_store).to receive(:clear).and_raise(RuntimeError, "clear error")
+        expect { cb.clear }.not_to raise_error
+        expect(cb.error_count).to eq(1)
+      end
+    end
+
+    context "keys failure" do
+      it "returns an empty array and records the failure without re-raising" do
+        allow(inner_store).to receive(:keys).and_raise(RuntimeError, "keys error")
+        result = cb.keys
+        expect(result).to eq([])
+        expect(cb.error_count).to eq(1)
+      end
+    end
+
     context "tripping to open state" do
       before { make_store_raise }
 
@@ -2821,6 +2860,111 @@ RSpec.describe SafeMemoize do
         obj = klass.new
         expect(obj.foo).to eq(1)
         expect(obj.bar).to eq(2)
+      end
+    end
+
+    context "fiber_local: true with stampede_protection:" do
+      it "caches normally for a fresh fiber-local entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def fetch
+            @calls += 1
+            "value"
+          end
+
+          memoize :fetch, ttl: 300, fiber_local: true, stampede_protection: true
+        end
+
+        obj = klass.new
+        expect(obj.fetch).to eq("value")
+        expect(obj.fetch).to eq("value")
+        expect(obj.calls).to eq(1)
+      end
+
+      it "triggers early recomputation when delta is large and beta is high" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def fetch
+            @calls += 1
+            "value"
+          end
+
+          memoize :fetch, ttl: 300, fiber_local: true, stampede_protection: 1_000_000.0
+        end
+
+        obj = klass.new
+        obj.fetch  # prime with a delta
+
+        # Force a large delta so XFetch fires
+        store = Fiber[:__safe_memoize__]
+        store&.dig(obj.object_id, :cache)&.each_value { |r| r[:delta] = 1000.0 }
+
+        recomputed = 20.times.any? {
+          obj.fetch
+          obj.calls > 1
+        }
+        expect(recomputed).to be true
+      end
+    end
+
+    context "shared: true with stampede_protection:" do
+      it "caches normally for a fresh shared entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def fetch
+            "shared_value"
+          end
+
+          memoize :fetch, ttl: 300, shared: true, stampede_protection: true
+        end
+
+        obj = klass.new
+        expect(obj.fetch).to eq("shared_value")
+        expect(obj.fetch).to eq("shared_value")
+      end
+
+      it "triggers early recomputation in shared cache when delta is large and beta is high" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          @call_count = 0
+          class << self
+            attr_accessor :call_count
+          end
+
+          def fetch
+            self.class.call_count += 1
+            "value"
+          end
+
+          memoize :fetch, ttl: 300, shared: true, stampede_protection: 1_000_000.0
+        end
+
+        obj = klass.new
+        obj.fetch  # prime
+
+        # Force a large delta in the shared cache record
+        shared_cache = klass.send(:__safe_memo_shared_cache__)
+        shared_cache.each_value { |r| r[:delta] = 1000.0 }
+
+        calls_before = klass.call_count
+        20.times { obj.fetch }
+        expect(klass.call_count).to be > calls_before
       end
     end
   end
