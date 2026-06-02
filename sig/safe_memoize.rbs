@@ -66,7 +66,7 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, ?group: Symbol | String | nil, **untyped extension_options) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, ?group: Symbol | String | nil, ?circuit_breaker: bool | Hash[Symbol, untyped] | nil, **untyped extension_options) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
     def safe_memoize_namespace: () -> String?
@@ -299,6 +299,32 @@ module SafeMemoize
       private
 
       def expired?: ({ expires_at: Float?, value: untyped, cached_at: Float }) -> bool
+    end
+
+    class CircuitBreaker < Base
+      DEFAULT_ERROR_THRESHOLD: Integer
+      DEFAULT_PROBE_INTERVAL: Float
+
+      attr_reader wrapped_store: Base
+      attr_reader error_threshold: Integer
+      attr_reader probe_interval: Float
+
+      def initialize: (Base store, ?error_threshold: Integer, ?probe_interval: Numeric) -> void
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+      def state: () -> Symbol
+      def open?: () -> bool
+      def error_count: () -> Integer
+      def reset!: () -> void
+
+      private
+
+      def current_state: () -> Symbol
+      def record_success: (Symbol prior_state) -> void
+      def record_failure: () -> void
     end
   end
 

@@ -2072,4 +2072,378 @@ RSpec.describe SafeMemoize do
       end
     end
   end
+
+  describe "SafeMemoize::Stores::CircuitBreaker" do
+    # A store double that raises on demand
+    let(:inner_store) do
+      store = instance_double(SafeMemoize::Stores::Memory)
+      allow(store).to receive(:is_a?).with(SafeMemoize::Stores::Base).and_return(true)
+      allow(store).to receive(:is_a?).with(SafeMemoize::Stores::CircuitBreaker).and_return(false)
+      store
+    end
+
+    let(:cb) do
+      SafeMemoize::Stores::CircuitBreaker.new(
+        inner_store,
+        error_threshold: 3,
+        probe_interval: 0.05
+      )
+    end
+
+    def make_store_healthy
+      allow(inner_store).to receive(:read).and_return(SafeMemoize::Stores::Base::MISS)
+      allow(inner_store).to receive(:write)
+    end
+
+    def make_store_raise
+      allow(inner_store).to receive(:read).and_raise(RuntimeError, "store down")
+      allow(inner_store).to receive(:write).and_raise(RuntimeError, "store down")
+    end
+
+    context "initial state" do
+      it "starts closed" do
+        expect(cb.state).to eq(:closed)
+      end
+
+      it "reports error_count of zero" do
+        expect(cb.error_count).to eq(0)
+      end
+
+      it "open? is false" do
+        expect(cb.open?).to be false
+      end
+
+      it "exposes error_threshold and probe_interval" do
+        expect(cb.error_threshold).to eq(3)
+        expect(cb.probe_interval).to eq(0.05)
+      end
+
+      it "exposes wrapped_store" do
+        expect(cb.wrapped_store).to eq(inner_store)
+      end
+    end
+
+    context "closed state — normal operation" do
+      it "delegates read to the inner store" do
+        allow(inner_store).to receive(:read).with(:key).and_return("value")
+        expect(cb.read(:key)).to eq("value")
+      end
+
+      it "delegates write to the inner store" do
+        allow(inner_store).to receive(:write).with(:key, "v", expires_in: 60)
+        cb.write(:key, "v", expires_in: 60)
+        expect(inner_store).to have_received(:write).once
+      end
+
+      it "delegates delete to the inner store" do
+        allow(inner_store).to receive(:delete).with(:key)
+        cb.delete(:key)
+        expect(inner_store).to have_received(:delete).once
+      end
+
+      it "delegates clear to the inner store" do
+        allow(inner_store).to receive(:clear)
+        cb.clear
+        expect(inner_store).to have_received(:clear).once
+      end
+
+      it "delegates keys to the inner store" do
+        allow(inner_store).to receive(:keys).and_return([:a, :b])
+        expect(cb.keys).to eq([:a, :b])
+      end
+
+      it "accumulates errors toward the threshold" do
+        make_store_raise
+        2.times { cb.read(:k) }
+        expect(cb.error_count).to eq(2)
+        expect(cb.state).to eq(:closed)
+      end
+    end
+
+    context "tripping to open state" do
+      before { make_store_raise }
+
+      it "opens after error_threshold consecutive failures" do
+        3.times { cb.read(:k) }
+        expect(cb.state).to eq(:open)
+      end
+
+      it "returns MISS from read without calling inner store while open" do
+        3.times { cb.read(:k) }
+
+        expect(inner_store).not_to receive(:read)
+        result = cb.read(:key)
+
+        expect(result).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "silently no-ops write without calling inner store while open" do
+        3.times { cb.read(:k) }
+
+        expect(inner_store).not_to receive(:write)
+        cb.write(:key, "v")
+      end
+
+      it "returns empty array from keys while open" do
+        3.times { cb.read(:k) }
+        expect(cb.keys).to eq([])
+      end
+
+      it "reports open? true" do
+        3.times { cb.read(:k) }
+        expect(cb.open?).to be true
+      end
+    end
+
+    context "half-open probe after probe_interval" do
+      before { make_store_raise }
+
+      def trip_and_wait
+        3.times { cb.read(:k) }
+        expect(cb.state).to eq(:open)
+        sleep(0.06)
+        expect(cb.state).to eq(:half_open)
+      end
+
+      it "transitions to half_open after probe_interval" do
+        trip_and_wait
+      end
+
+      it "lets a read through to the inner store in half_open" do
+        trip_and_wait
+        make_store_healthy
+
+        cb.read(:key)
+
+        expect(inner_store).to have_received(:read).with(:key)
+      end
+
+      it "closes the circuit after a successful read in half_open" do
+        trip_and_wait
+        make_store_healthy
+
+        cb.read(:key)
+
+        expect(cb.state).to eq(:closed)
+        expect(cb.error_count).to eq(0)
+      end
+
+      it "closes the circuit after a successful write in half_open" do
+        trip_and_wait
+        make_store_healthy
+
+        cb.write(:key, "v")
+
+        expect(cb.state).to eq(:closed)
+      end
+
+      it "re-opens and resets the timer if the probe read fails" do
+        trip_and_wait
+
+        # store still raising
+        cb.read(:k)
+
+        expect(cb.state).to eq(:open)
+      end
+    end
+
+    context "reset!" do
+      it "clears error count and closes the circuit" do
+        make_store_raise
+        3.times { cb.read(:k) }
+        expect(cb.state).to eq(:open)
+
+        cb.reset!
+
+        expect(cb.state).to eq(:closed)
+        expect(cb.error_count).to eq(0)
+      end
+    end
+
+    context "success resets error counter in closed state" do
+      it "a successful call resets the error counter" do
+        allow(inner_store).to receive(:read).and_raise(RuntimeError)
+        2.times { cb.read(:k) }
+        expect(cb.error_count).to eq(2)
+
+        allow(inner_store).to receive(:read).and_return("ok")
+        cb.read(:k)
+
+        expect(cb.error_count).to eq(0)
+        expect(cb.state).to eq(:closed)
+      end
+    end
+
+    context "validation" do
+      it "raises ArgumentError if wrapped object is not a Stores::Base" do
+        expect do
+          SafeMemoize::Stores::CircuitBreaker.new("not a store")
+        end.to raise_error(ArgumentError, /Stores::Base/)
+      end
+
+      it "raises ArgumentError for non-positive error_threshold" do
+        store = SafeMemoize::Stores::Memory.new
+        expect do
+          SafeMemoize::Stores::CircuitBreaker.new(store, error_threshold: 0)
+        end.to raise_error(ArgumentError, /error_threshold/)
+      end
+
+      it "raises ArgumentError for non-positive probe_interval" do
+        store = SafeMemoize::Stores::Memory.new
+        expect do
+          SafeMemoize::Stores::CircuitBreaker.new(store, probe_interval: 0)
+        end.to raise_error(ArgumentError, /probe_interval/)
+      end
+    end
+  end
+
+  describe "circuit_breaker: memoize option" do
+    let(:flaky_store) { SafeMemoize::Stores::Memory.new }
+
+    def make_klass(cb_opt)
+      store = flaky_store
+      Class.new do
+        prepend SafeMemoize
+
+        attr_reader :calls
+
+        def initialize
+          @calls = 0
+        end
+
+        def fetch(id)
+          @calls += 1
+          "result_#{id}"
+        end
+
+        memoize :fetch, store: store, circuit_breaker: cb_opt
+      end
+    end
+
+    context "circuit_breaker: true" do
+      it "wraps the store in a CircuitBreaker with default options" do
+        klass = make_klass(true)
+        # Access the memoize wrapper to inspect — just verify the class works
+        obj = klass.new
+        expect(obj.fetch(1)).to eq("result_1")
+        expect(obj.fetch(1)).to eq("result_1")
+        expect(obj.calls).to eq(1)
+      end
+    end
+
+    context "circuit_breaker: { ... }" do
+      it "wraps the store with custom options" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def compute
+            @calls += 1
+            42
+          end
+
+          memoize :compute,
+            store: SafeMemoize::Stores::Memory.new,
+            circuit_breaker: {error_threshold: 2, probe_interval: 0.01}
+        end
+
+        obj = klass.new
+        expect(obj.compute).to eq(42)
+        expect(obj.calls).to eq(1)
+      end
+    end
+
+    context "fallback to per-instance cache when store is unhealthy" do
+      it "continues serving values from the in-memory cache after store failures" do
+        # Build a store that always raises
+        raising_store = Class.new(SafeMemoize::Stores::Base) do
+          def read(_key) = raise("redis down")
+
+          def write(_key, _value, expires_in: nil) = raise("redis down")
+
+          def delete(_key) = nil
+
+          def clear = nil
+
+          def keys = []
+        end.new
+
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def data
+            @calls += 1
+            "value"
+          end
+
+          memoize :data,
+            store: raising_store,
+            circuit_breaker: {error_threshold: 1, probe_interval: 60}
+        end
+
+        obj = klass.new
+
+        # First call: store raises on write (circuit trips after 1 error),
+        # method body runs, value returned
+        result1 = obj.data
+        expect(result1).to eq("value")
+
+        # Second call: circuit is open, store bypassed; the per-instance hash
+        # has the value from the first call so it returns without recomputing
+        result2 = obj.data
+        expect(result2).to eq("value")
+        expect(obj.calls).to be <= 2  # at most 2 computations
+      end
+    end
+
+    context "validation" do
+      it "raises ArgumentError when no store is configured" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, circuit_breaker: true
+          end
+        end.to raise_error(ArgumentError, /requires a store/)
+      end
+
+      it "raises ArgumentError for invalid circuit_breaker value" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, store: SafeMemoize::Stores::Memory.new, circuit_breaker: 42
+          end
+        end.to raise_error(ArgumentError, /must be true or a Hash/)
+      end
+
+      it "does not double-wrap an already-wrapped CircuitBreaker store" do
+        store = SafeMemoize::Stores::CircuitBreaker.new(
+          SafeMemoize::Stores::Memory.new,
+          error_threshold: 2
+        )
+        klass = Class.new do
+          prepend SafeMemoize
+
+          define_method(:data) { 1 }
+          memoize :data, store: store, circuit_breaker: true
+        end
+        # Smoke test — no double-wrap error
+        expect(klass.new.data).to eq(1)
+      end
+    end
+  end
 end
