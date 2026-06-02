@@ -4,17 +4,6 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 ---
 
-## v1.4.0 — Developer Experience
-
-*Goal: reduce boilerplate for classes with many memoized methods and add a safety rail for shared mutable cached values.*
-
-| Feature | Description | Status |
-|---|---|---|
-| Per-class default options | `safe_memoize_options ttl: 60, max_size: 100` class-level macro that sets option defaults shared by every `memoize` call on the class; per-call options still override | Shipped |
-| Copy-on-read | `memoize :config, copy_on_read: true` — returns a `dup` (or `deep_dup` when available) of the cached value on every read, preventing callers from mutating shared cached state | Shipped |
-
----
-
 ## v1.5.0 — Cache Invalidation
 
 *Goal: group-level cache invalidation so related methods can be busted in one operation.*

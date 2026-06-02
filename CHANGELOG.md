@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-02
+
 ### Added
 
 - `safe_memoize_options(**opts)` class-level macro — sets default options for every subsequent `memoize` call on the class. Per-call options take precedence; class defaults take precedence over global `SafeMemoize.configure` defaults. Accepts all `memoize` options except mode-switch options (`shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:`), which must be specified per call. Call with no arguments to clear class-level defaults.
