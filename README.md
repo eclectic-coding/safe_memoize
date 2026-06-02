@@ -81,6 +81,8 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Copy-on-read via `copy_on_read: true` — returns a `dup`/`deep_dup` on every cache read to protect shared cached state from caller mutation](#copy-on-read)
 - [Cache invalidation groups via `group:` — tag related methods with a group name and bust them all with a single `reset_memo_group` call](#cache-invalidation-groups)
 - [Circuit breaker for external stores — `Stores::CircuitBreaker` wraps any store adapter and falls back to the per-instance cache when the store is down; configurable error threshold and probe interval](#circuit-breaker-for-external-stores)
+- [Multi-level (L1/L2) caching — `Stores::Multilevel` or `store: [l1, l2]` shorthand; reads from the fastest layer first and promotes on miss](#multi-level-caching)
+- [Stampede protection — `stampede_protection:` option applies the XFetch algorithm to the per-instance cache; `Stores::XFetch` applies it to external stores](#stampede-protection)
 
 ## Installation
 
@@ -1533,6 +1535,102 @@ end
 
 [↑ Back to features](#features)
 
+## Multi-level caching
+
+`SafeMemoize::Stores::Multilevel` chains two or more store adapters from fastest (L1) to slowest. Reads walk the chain until a hit is found; on a miss in an earlier layer the value is fetched from the next layer and written back ("promoted") into all shallower layers. Writes and deletes reach every layer.
+
+```ruby
+l1 = SafeMemoize::Stores::Memory.new          # fast, in-process
+l2 = MyRedisStore.new                          # slower, cross-process
+
+class ProductService
+  prepend SafeMemoize
+
+  def catalog = fetch_catalog_from_db
+  memoize :catalog, store: [l1, l2], ttl: 300  # Array shorthand
+end
+```
+
+The `store: [l1, l2]` shorthand is equivalent to `store: Stores::Multilevel.new(l1, l2)`.
+
+### Promotion TTL
+
+By default promoted entries have no TTL (the L1 store's own eviction — e.g. LRU — handles memory bounds). Set `promote_expires_in:` to give L1 entries a shorter lifetime than L2:
+
+```ruby
+store = SafeMemoize::Stores::Multilevel.new(l1, l2, promote_expires_in: 60)
+memoize :catalog, store: store, ttl: 300
+```
+
+### Composition
+
+`Multilevel` composes with `CircuitBreaker` and `XFetch`:
+
+```ruby
+safe_l2 = SafeMemoize::Stores::CircuitBreaker.new(MyRedisStore.new)
+store   = SafeMemoize::Stores::Multilevel.new(SafeMemoize::Stores::Memory.new, safe_l2)
+memoize :catalog, store: store, ttl: 300
+```
+
+[↑ Back to features](#features)
+
+## Stampede protection
+
+Cache stampedes (a.k.a. thundering-herd) happen when a popular entry expires and many processes simultaneously recompute it. SafeMemoize offers two mechanisms:
+
+### `stampede_protection:` — per-instance cache
+
+The `stampede_protection:` option applies the **XFetch algorithm** to the per-instance in-process cache. Instead of expiring at a hard deadline, each cache read probabilistically triggers early recomputation as the entry approaches its TTL:
+
+```ruby
+class ApiClient
+  prepend SafeMemoize
+
+  def catalog = fetch_catalog
+  memoize :catalog, ttl: 300, stampede_protection: true   # default beta=1.0
+  # or
+  memoize :catalog, ttl: 300, stampede_protection: 2.0    # custom beta (more aggressive)
+end
+```
+
+The measured computation time from each cache miss is stored as `delta` and used in subsequent reads, so the XFetch probability adapts to real observed latency automatically.
+
+**Requirements:** `ttl:` must be set. Incompatible with `store:` (see `Stores::XFetch` below) and `ractor_safe:`.
+
+### `Stores::XFetch` — external stores
+
+For external stores (Redis, Rails.cache, etc.) wrap the adapter with `Stores::XFetch`. Values are stored with an `expires_at` envelope so the wrapper can apply the formula even though the store's `read` returns only the plain value:
+
+```ruby
+store = SafeMemoize::Stores::XFetch.new(
+  MyRedisStore.new,
+  delta: 0.2,   # estimated typical computation time (seconds)
+  beta:  1.5    # aggressiveness scalar
+)
+
+class CatalogService
+  prepend SafeMemoize
+
+  def products = db_fetch
+  memoize :products, store: store, ttl: 300
+end
+```
+
+**XFetch formula:** `now − (delta × beta × log(rand)) ≥ expires_at`
+
+A higher `beta` triggers early recomputation more aggressively. A larger `delta` (longer computation) also increases the recomputation window.
+
+`Stores::XFetch` composes with `Multilevel` and `CircuitBreaker`:
+
+```ruby
+store = SafeMemoize::Stores::XFetch.new(
+  SafeMemoize::Stores::CircuitBreaker.new(MyRedisStore.new),
+  delta: 0.1
+)
+```
+
+[↑ Back to features](#features)
+
 ## Per-class default options (`safe_memoize_options`)
 
 `safe_memoize_options` sets option defaults for every `memoize` call on the class, eliminating repetition when many methods share the same TTL, LRU cap, or other option. Per-call options still take precedence; class defaults take precedence over global `SafeMemoize.configure` defaults.
@@ -1772,6 +1870,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `copy_on_read:` | `Boolean` | `false` | Return a `dup`/`deep_dup` of the cached value on every read; protects shared state from caller mutation; nil and frozen values pass through; incompatible with `ractor_safe:` |
 | `group:` | `Symbol \| String \| nil` | `nil` | Assigns the method to a named invalidation group; call `reset_memo_group` / `reset_shared_memo_group` to bust all methods in the group at once; a method belongs to at most one group |
 | `circuit_breaker:` | `true \| Hash \| nil` | `nil` | Wraps the configured `store:` in a `Stores::CircuitBreaker`; `true` uses defaults (`error_threshold: 5`, `probe_interval: 30`); pass a Hash to customise; requires a store to be set; does not double-wrap |
+| `stampede_protection:` | `true \| Numeric \| nil` | `nil` | Enables XFetch probabilistic early expiry on the per-instance cache; `true` uses beta=1.0; pass a `Numeric` for a custom beta; requires `ttl:`; incompatible with `store:` and `ractor_safe:` |
 | *(extension options)* | any | — | Unknown kwargs are validated against registered extensions; raise `ArgumentError` if unclaimed |
 
 ### `memoize_all` options (class method)
@@ -1789,7 +1888,7 @@ All `memoize` option keys above, plus:
 
 | Option key | Type | Default | Notes |
 |---|---|---|---|
-| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`, `group:`, `circuit_breaker:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
+| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`, `group:`, `circuit_breaker:`, `stampede_protection:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
 
 ### Instance methods (public)
 

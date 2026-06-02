@@ -8,6 +8,13 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- `SafeMemoize::Stores::Multilevel` — multi-level (L1/L2/…) cache store that checks faster layers first and promotes values from deeper layers into shallower ones on a miss ("read-through promotion"). Reads walk the list from first (fastest) to last; writes go to every level simultaneously; deletes and clears apply to all levels. Accepts `promote_expires_in:` to control the TTL of promoted entries (default: no TTL, relying on the L1 store's own eviction). Raises `ArgumentError` if fewer than two stores are supplied.
+- `store: [l1, l2]` shorthand on `memoize` — passing an `Array` of `Stores::Base` instances is automatically converted to `Stores::Multilevel.new(*stores)`, enabling multi-level caching without explicit wrapper construction.
+- `SafeMemoize::Stores::XFetch` — wraps any `Stores::Base` adapter with probabilistic early expiry (the XFetch algorithm) to prevent cache stampedes. Values are stored with an envelope that includes `expires_at`; on read the XFetch formula `now − (delta × beta × log(rand)) ≥ expires_at` decides whether to return the value or `MISS` (triggering early recomputation). Configurable via `beta:` (aggressiveness scalar, default 1.0) and `delta:` (estimated computation time in seconds, default 0.1). Composes naturally with `Multilevel` and `CircuitBreaker`.
+- `stampede_protection:` option on `memoize` — enables the XFetch algorithm for the per-instance in-process cache. Pass `true` (default beta 1.0) or a `Numeric` for a custom beta. Records actual computation time as `delta` on each miss so the XFetch probability adapts to real observed latency. Requires `ttl:`. Incompatible with `store:` (use `Stores::XFetch` for external stores) and `ractor_safe:`. Accepted by `safe_memoize_options` as a class-wide default.
+
 ## [1.6.0] - 2026-06-02
 
 ### Added
