@@ -4,16 +4,6 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 ---
 
-## v1.5.0 — Cache Invalidation
-
-*Goal: group-level cache invalidation so related methods can be busted in one operation.*
-
-| Feature | Description | Status |
-|---|---|---|
-| Memoization groups | `memoize :find, group: :database` then `reset_memo_group(:database)` to invalidate all methods tagged with the same group at once; groups can span multiple methods on the same class | Shipped |
-
----
-
 ## v1.6.0 — Resilience
 
 *Goal: make external-store memoization resilient to infrastructure failures.*
