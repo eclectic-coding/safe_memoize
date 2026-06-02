@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-02
+
 ### Added
 
 - `SafeMemoize::Stores::CircuitBreaker` — a `Stores::Base` wrapper that protects any external store adapter with a three-state circuit breaker (`:closed` → `:open` → `:half_open`). When the wrapped store raises on `read` or `write`, the error is swallowed: reads return `MISS` (triggering the per-instance in-process fallback cache) and writes are no-ops (the return value is unaffected). After a configurable number of consecutive failures (`error_threshold:`, default 5) the circuit opens and all store calls are bypassed until a probe interval elapses (`probe_interval:`, default 30 s), at which point a single probe request is let through; success closes the circuit, failure resets the timer. Any successful call in `:closed` state resets the consecutive error counter, so transient blips do not accumulate toward the threshold.

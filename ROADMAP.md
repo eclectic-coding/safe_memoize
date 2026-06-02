@@ -4,16 +4,6 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 ---
 
-## v1.6.0 — Resilience
-
-*Goal: make external-store memoization resilient to infrastructure failures.*
-
-| Feature | Description | Status |
-|---|---|---|
-| Circuit breaker for external stores | When a `store:` adapter raises on `read` or `write`, automatically fall back to the per-instance in-process hash rather than propagating the exception; configurable error threshold and recovery probe interval | Shipped |
-
----
-
 ## v1.7.0 — Advanced Store Features
 
 *Goal: multi-process performance patterns for high-traffic deployments.*
