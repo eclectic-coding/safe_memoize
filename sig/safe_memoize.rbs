@@ -18,6 +18,7 @@ module SafeMemoize
   @__safe_memo_shared_mutex__: Mutex?
   @__safe_memo_shared_lru_order__: Hash[Symbol, Hash[memo_key, true]]?
 
+  UNSET: untyped
   SHARED_CACHE_REGISTRY: Hash[String, Stores::Base]
   SHARED_CACHE_MUTEX: Mutex
   EXTENSION_REGISTRY: Hash[Symbol, untyped]
@@ -64,12 +65,13 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, **untyped extension_options) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, **untyped extension_options) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
     def safe_memoize_namespace: () -> String?
     def safe_memoize_namespace=: (String?) -> String?
-    def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool, ?namespace: String?, ?shared_cache: String?) -> void
+    def safe_memoize_options: (**untyped opts) -> Hash[Symbol, untyped]?
+    def memoize_all: (?except: Array[Symbol | String], ?only: Array[Symbol | String], ?include_protected: bool, ?include_private: bool, ?ttl: Numeric?, ?max_size: Integer?, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?fiber_local: bool, ?namespace: String?, ?shared_cache: String?, ?copy_on_read: bool) -> void
     def reset_shared_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_shared_memos: () -> void
     def shared_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
@@ -85,6 +87,7 @@ module SafeMemoize
     def __safe_memo_class_key_generators__: () -> Hash[Symbol, Proc]
     def __safe_memo_method_namespaces__: () -> Hash[Symbol, String]
     def __safe_memo_class_cache_bust_generators__: () -> Hash[Symbol, Proc | Symbol]
+    def __safe_memoize_defaults__: () -> Hash[Symbol, untyped]?
     def memoized_method_visibility: (Symbol method_name) -> Symbol
   end
 

@@ -1436,4 +1436,371 @@ RSpec.describe SafeMemoize do
       end
     end
   end
+
+  describe "safe_memoize_options" do
+    context "ttl default" do
+      it "applies the class-level ttl to every memoize call that omits ttl:" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options ttl: 0.05
+
+          def value = rand
+          memoize :value
+        end
+
+        obj = klass.new
+        first = obj.value
+        expect(obj.value).to eq(first)
+
+        sleep 0.07
+        expect(obj.value).not_to eq(first)
+      end
+
+      it "is overridden by an explicit ttl: on the memoize call" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options ttl: 0.05
+
+          def a = rand
+          memoize :a
+
+          def b = rand
+          memoize :b, ttl: 999
+        end
+
+        obj = klass.new
+        a_first = obj.a
+        b_first = obj.b
+
+        sleep 0.07
+
+        expect(obj.a).not_to eq(a_first)
+        expect(obj.b).to eq(b_first)
+      end
+    end
+
+    context "max_size default" do
+      it "applies the class-level max_size to every memoize call" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options max_size: 2
+
+          def fetch(n) = n * 10
+          memoize :fetch
+        end
+
+        obj = klass.new
+        obj.fetch(1)
+        obj.fetch(2)
+        obj.fetch(3)
+
+        expect(obj.memo_count(:fetch)).to eq(2)
+      end
+
+      it "is overridden by an explicit max_size: on the memoize call" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options max_size: 2
+
+          def small(n) = n
+          memoize :small
+
+          def large(n) = n
+          memoize :large, max_size: 10
+        end
+
+        obj = klass.new
+        5.times { |i| obj.small(i) }
+        5.times { |i| obj.large(i) }
+
+        expect(obj.memo_count(:small)).to eq(2)
+        expect(obj.memo_count(:large)).to eq(5)
+      end
+    end
+
+    context "copy_on_read default" do
+      it "applies copy_on_read to all memoized methods on the class" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options copy_on_read: true
+
+          def data = [1, 2, 3]
+          memoize :data
+        end
+
+        obj = klass.new
+        r1 = obj.data
+        r2 = obj.data
+        expect(r1).to eq(r2)
+        expect(r1).not_to be(r2)
+      end
+    end
+
+    context "global config fallback" do
+      it "class defaults take precedence over global config" do
+        SafeMemoize.configure { |c| c.default_max_size = 10 }
+
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options max_size: 2
+
+          def fetch(n) = n
+          memoize :fetch
+        end
+
+        obj = klass.new
+        5.times { |i| obj.fetch(i) }
+        expect(obj.memo_count(:fetch)).to eq(2)
+      ensure
+        SafeMemoize.reset_configuration!
+      end
+
+      it "global config still applies when no class default is set for that option" do
+        SafeMemoize.configure { |c| c.default_max_size = 2 }
+
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def fetch(n) = n
+          memoize :fetch
+        end
+
+        obj = klass.new
+        5.times { |i| obj.fetch(i) }
+        expect(obj.memo_count(:fetch)).to eq(2)
+      ensure
+        SafeMemoize.reset_configuration!
+      end
+    end
+
+    context "clearing class defaults" do
+      it "clears all defaults when called with no arguments" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options ttl: 0.01
+
+          def a = rand
+          memoize :a
+        end
+
+        klass.safe_memoize_options
+
+        klass.class_eval do
+          def b = rand
+          memoize :b
+        end
+
+        obj = klass.new
+        b_first = obj.b
+        sleep 0.02
+        expect(obj.b).to eq(b_first)
+      end
+    end
+
+    context "disallowed options" do
+      it "raises ArgumentError for :shared" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            safe_memoize_options shared: true
+          end
+        end.to raise_error(ArgumentError, /:shared/)
+      end
+
+      it "raises ArgumentError for :fiber_local" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            safe_memoize_options fiber_local: true
+          end
+        end.to raise_error(ArgumentError, /:fiber_local/)
+      end
+
+      it "raises ArgumentError for :ractor_safe" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            safe_memoize_options ractor_safe: true
+          end
+        end.to raise_error(ArgumentError, /:ractor_safe/)
+      end
+
+      it "raises ArgumentError for :shared_cache" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            safe_memoize_options shared_cache: "my_cache"
+          end
+        end.to raise_error(ArgumentError, /:shared_cache/)
+      end
+    end
+  end
+
+  describe "copy_on_read: true" do
+    let(:klass) do
+      Class.new do
+        prepend SafeMemoize
+
+        def config = {host: "localhost", port: 8080}
+        memoize :config, copy_on_read: true
+
+        def tags = %w[a b c]
+        memoize :tags, copy_on_read: true
+
+        def count = 42
+        memoize :count, copy_on_read: true
+
+        def nothing = nil
+        memoize :nothing, copy_on_read: true
+      end
+    end
+
+    it "returns equal values on successive calls" do
+      obj = klass.new
+      expect(obj.config).to eq({host: "localhost", port: 8080})
+      expect(obj.config).to eq({host: "localhost", port: 8080})
+    end
+
+    it "returns a different object identity on every cache hit" do
+      obj = klass.new
+      r1 = obj.config
+      r2 = obj.config
+      expect(r1).not_to be(r2)
+    end
+
+    it "prevents caller mutation from corrupting the cache" do
+      obj = klass.new
+      result = obj.config
+      result[:host] = "mutated"
+
+      fresh = obj.config
+      expect(fresh[:host]).to eq("localhost")
+    end
+
+    it "returns a different array object on every call" do
+      obj = klass.new
+      r1 = obj.tags
+      r2 = obj.tags
+      expect(r1).to eq(r2)
+      expect(r1).not_to be(r2)
+    end
+
+    it "returns nil as-is (no dup attempted)" do
+      obj = klass.new
+      expect(obj.nothing).to be_nil
+      expect(obj.nothing).to be_nil
+    end
+
+    it "returns frozen/immediate values as-is" do
+      obj = klass.new
+      r1 = obj.count
+      r2 = obj.count
+      expect(r1).to eq(42)
+      expect(r2).to eq(42)
+    end
+
+    context "with max_size: (locked path)" do
+      it "still dups on hit through the locked path" do
+        k = Class.new do
+          prepend SafeMemoize
+
+          def data = [1, 2, 3]
+          memoize :data, copy_on_read: true, max_size: 10
+        end
+
+        obj = k.new
+        r1 = obj.data
+        r2 = obj.data
+        expect(r1).to eq(r2)
+        expect(r1).not_to be(r2)
+
+        r2 << 99
+        expect(obj.data).to eq([1, 2, 3])
+      end
+    end
+
+    context "with shared: true" do
+      it "still dups on hit through the shared path" do
+        k = Class.new do
+          prepend SafeMemoize
+
+          def shared_data = [10, 20]
+          memoize :shared_data, copy_on_read: true, shared: true
+        end
+
+        obj = k.new
+        r1 = obj.shared_data
+        r2 = obj.shared_data
+        expect(r1).to eq(r2)
+        expect(r1).not_to be(r2)
+
+        r1 << 99
+        expect(k.new.shared_data).to eq([10, 20])
+      end
+    end
+
+    context "with ttl:" do
+      it "returns a dup on every hit, including after a ttl refresh" do
+        k = Class.new do
+          prepend SafeMemoize
+
+          def items = %w[x y]
+          memoize :items, copy_on_read: true, ttl: 60
+        end
+
+        obj = k.new
+        r1 = obj.items
+        r2 = obj.items
+        expect(r1).to eq(r2)
+        expect(r1).not_to be(r2)
+      end
+    end
+
+    context "with deep_dup available" do
+      it "calls deep_dup when the value responds to it" do
+        inner = Object.new
+        deep_copy = Object.new
+        allow(inner).to receive(:respond_to?).with(:deep_dup).and_return(true)
+        allow(inner).to receive(:respond_to?).with(anything).and_call_original
+        allow(inner).to receive(:deep_dup).and_return(deep_copy)
+        allow(inner).to receive(:frozen?).and_return(false)
+
+        k = Class.new do
+          prepend SafeMemoize
+
+          define_method(:wrapped) { inner }
+          memoize :wrapped, copy_on_read: true
+        end
+
+        obj = k.new
+        obj.wrapped
+        result = obj.wrapped
+        expect(result).to be(deep_copy)
+      end
+    end
+
+    context "ractor_safe: incompatibility" do
+      it "raises ArgumentError when combined with ractor_safe:" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def value = 42
+            memoize :value, shared: true, ractor_safe: true, copy_on_read: true
+          end
+        end.to raise_error(ArgumentError, /copy_on_read/)
+      end
+    end
+  end
 end

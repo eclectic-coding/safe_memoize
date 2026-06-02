@@ -37,7 +37,7 @@ module SafeMemoize
     #   a supervisor +Ractor+ rather than a +Mutex+-protected ivar, making it accessible
     #   from worker Ractors. Requires +shared: true+. Cached values are deep-frozen via
     #   +Ractor.make_shareable+. Incompatible with +if:+, +unless:+, +max_size:+,
-    #   +ttl_refresh:+, +key:+, and +store:+.
+    #   +ttl_refresh:+, +key:+, +store:+, and +copy_on_read:+.
     # @param namespace [String, nil] prefix prepended to every cache key for this method,
     #   scoping it to a logical partition. Takes precedence over both the class-level
     #   {#safe_memoize_namespace} and the global {SafeMemoize::Configuration#namespace}.
@@ -59,6 +59,11 @@ module SafeMemoize
     #   {SafeMemoize.register_shared_cache} before the class is loaded to supply a custom
     #   adapter. Incompatible with +shared:+, +store:+, +fiber_local:+, +ractor_safe:+,
     #   and +max_size:+. Composes naturally with +namespace:+, +ttl:+, +if:+, and +key:+.
+    # @param copy_on_read [Boolean] when +true+, every cache read returns a +dup+ (or
+    #   +deep_dup+ when available) of the stored value rather than the cached object
+    #   itself. Prevents callers from mutating shared cached state. Frozen and +nil+
+    #   values are returned as-is. Incompatible with +ractor_safe:+ (ractor values are
+    #   always frozen; use that guarantee instead).
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -73,10 +78,13 @@ module SafeMemoize
     # @example Conditional — only cache successful responses
     #   memoize :fetch, if: ->(v) { v[:status] == 200 }
     #
+    # @example Copy-on-read — protect mutable cached config
+    #   memoize :config, copy_on_read: true
+    #
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: nil, max_size: nil, ttl_refresh: false, if: nil, unless: nil, shared: false, key: nil, store: nil, fiber_local: false, ractor_safe: false, namespace: nil, shared_cache: nil, cache_bust: nil, **extension_options)
+    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, **extension_options)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -102,17 +110,45 @@ module SafeMemoize
         cache_bust = injected[:cache_bust] if injected.key?(:cache_bust)
       end
 
+      # :if and :unless are reserved Ruby keywords; use binding to extract them
+      cond_if = binding.local_variable_get(:if)
+      cond_unless = binding.local_variable_get(:unless)
+
+      # Apply class-level defaults (safe_memoize_options) for any still-unset options
+      if (cls_defaults = __safe_memoize_defaults__)
+        ttl = cls_defaults[:ttl] if ttl.equal?(UNSET) && cls_defaults.key?(:ttl)
+        max_size = cls_defaults[:max_size] if max_size.equal?(UNSET) && cls_defaults.key?(:max_size)
+        ttl_refresh = cls_defaults[:ttl_refresh] if ttl_refresh.equal?(UNSET) && cls_defaults.key?(:ttl_refresh)
+        cond_if = cls_defaults[:if] if cond_if.equal?(UNSET) && cls_defaults.key?(:if)
+        cond_unless = cls_defaults[:unless] if cond_unless.equal?(UNSET) && cls_defaults.key?(:unless)
+        key = cls_defaults[:key] if key.equal?(UNSET) && cls_defaults.key?(:key)
+        cache_bust = cls_defaults[:cache_bust] if cache_bust.equal?(UNSET) && cls_defaults.key?(:cache_bust)
+        copy_on_read = cls_defaults[:copy_on_read] if copy_on_read.equal?(UNSET) && cls_defaults.key?(:copy_on_read)
+        namespace = cls_defaults[:namespace] if namespace.equal?(UNSET) && cls_defaults.key?(:namespace)
+        store = cls_defaults[:store] if store.equal?(UNSET) && cls_defaults.key?(:store)
+      end
+
+      # Normalize remaining UNSET to original per-call defaults
+      ttl = nil if ttl.equal?(UNSET)
+      max_size = nil if max_size.equal?(UNSET)
+      ttl_refresh = false if ttl_refresh.equal?(UNSET)
+      shared = false if shared.equal?(UNSET)
+      key = nil if key.equal?(UNSET)
+      store = nil if store.equal?(UNSET)
+      fiber_local = false if fiber_local.equal?(UNSET)
+      ractor_safe = false if ractor_safe.equal?(UNSET)
+      namespace = nil if namespace.equal?(UNSET)
+      shared_cache = nil if shared_cache.equal?(UNSET)
+      cache_bust = nil if cache_bust.equal?(UNSET)
+      copy_on_read = false if copy_on_read.equal?(UNSET)
+      cond_if = nil if cond_if.equal?(UNSET)
+      cond_unless = nil if cond_unless.equal?(UNSET)
+
       visibility = memoized_method_visibility(method_name)
 
       config = SafeMemoize.configuration
       ttl = config.default_ttl if ttl.nil?
       max_size = config.default_max_size if max_size.nil?
-
-      # :if and :unless are reserved Ruby keywords, so they can't be referenced
-      # as local variables directly. binding.local_variable_get is the only way
-      # to read keyword arguments with those names inside the method body.
-      cond_if = binding.local_variable_get(:if)
-      cond_unless = binding.local_variable_get(:unless)
 
       ttl = if ttl.nil?
         nil
@@ -167,6 +203,7 @@ module SafeMemoize
         raise ArgumentError, "ractor_safe: is incompatible with ttl_refresh:" if ttl_refresh
         raise ArgumentError, "ractor_safe: is incompatible with key:" if key
         raise ArgumentError, "ractor_safe: is incompatible with store:" if store
+        raise ArgumentError, "ractor_safe: is incompatible with copy_on_read:" if copy_on_read
       end
 
       if namespace
@@ -217,6 +254,18 @@ module SafeMemoize
         ->(result) { !cond_unless.call(result) }
       end
 
+      # Build a value-duplication function for copy_on_read: true.
+      # Frozen and nil values are returned as-is; deep_dup is preferred when available
+      # (e.g. ActiveRecord objects) so nested mutable structures are also protected.
+      dup_fn = if copy_on_read
+        lambda do |v|
+          return v if v.nil? || v.frozen?
+          v.respond_to?(:deep_dup) ? v.deep_dup : v.dup
+        end
+      else
+        ->(v) { v }
+      end
+
       if effective_store
         miss = SafeMemoize::Stores::Base::MISS
 
@@ -231,7 +280,7 @@ module SafeMemoize
               effective_store.write(cache_key, cached, expires_in: ttl) if ttl_refresh
               record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, {value: cached, expires_at: nil, cached_at: nil})
-              return cached
+              return dup_fn.call(cached)
             end
 
             start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -249,7 +298,7 @@ module SafeMemoize
             record_cache_miss(cache_key, elapsed_time)
             call_memo_hooks(:on_miss, cache_key, {value: value, expires_at: nil, cached_at: now})
 
-            value
+            dup_fn.call(value)
           end
 
           send(visibility, method_name)
@@ -278,7 +327,7 @@ module SafeMemoize
               record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
               record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, record)
-              memo_record_value(record)
+              dup_fn.call(memo_record_value(record))
             else
               call_memo_hooks(:on_expire, cache_key, record) if record
 
@@ -312,7 +361,7 @@ module SafeMemoize
               record_cache_miss(cache_key, elapsed_time)
               call_memo_hooks(:on_miss, cache_key, new_record)
 
-              value
+              dup_fn.call(value)
             end
           end
 
@@ -356,7 +405,7 @@ module SafeMemoize
                 record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
                 record_cache_hit(cache_key)
                 call_memo_hooks(:on_hit, cache_key, record)
-                record[:value]
+                dup_fn.call(record[:value])
               else
                 call_memo_hooks(:on_expire, cache_key, record) if record && !record_live
 
@@ -388,7 +437,7 @@ module SafeMemoize
                 record_cache_miss(cache_key, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
 
-                value
+                dup_fn.call(value)
               end
             end
           end
@@ -417,7 +466,7 @@ module SafeMemoize
                 record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
                 record_cache_hit(cache_key)
                 call_memo_hooks(:on_hit, cache_key, record)
-                memo_record_value(record)
+                dup_fn.call(memo_record_value(record))
               else
                 start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
                 value = Adapters::OpenTelemetry.trace(SafeMemoize.configuration.opentelemetry_tracer, method_name, self.class.name) { super(*args, **kwargs) }
@@ -434,7 +483,7 @@ module SafeMemoize
                 record_cache_miss(cache_key, elapsed_time)
                 call_memo_hooks(:on_miss, cache_key, new_record)
 
-                value
+                dup_fn.call(value)
               end
             end
           else
@@ -442,7 +491,7 @@ module SafeMemoize
             if (record = memo_cache_record(cache_key))
               record_cache_hit(cache_key)
               call_memo_hooks(:on_hit, cache_key, record)
-              return memo_record_value(record)
+              return dup_fn.call(memo_record_value(record))
             end
 
             # Cache miss - compute and store
@@ -459,7 +508,7 @@ module SafeMemoize
               call_memo_hooks(:on_miss, cache_key, new_record)
             end
 
-            result
+            dup_fn.call(result)
           end
         end
 
@@ -518,6 +567,41 @@ module SafeMemoize
         raise ArgumentError, "safe_memoize_namespace= must not contain ':'" if ns.include?(":")
       end
       @__safe_memoize_namespace__ = ns
+    end
+
+    # Sets class-wide default options applied to every subsequent {#memoize} call
+    # on this class. Per-call options take precedence; class defaults take
+    # precedence over global {SafeMemoize::Configuration} defaults.
+    #
+    # Call with no arguments (or an empty hash) to clear all class-level defaults.
+    #
+    # @example Apply a TTL and LRU cap to every memoized method on the class
+    #   class ApiClient
+    #     prepend SafeMemoize
+    #     safe_memoize_options ttl: 60, max_size: 200
+    #
+    #     def fetch(id) = http.get(id)
+    #     memoize :fetch                     # uses ttl: 60, max_size: 200
+    #
+    #     def list = http.get("/all")
+    #     memoize :list, ttl: 300            # uses max_size: 200, ttl: 300
+    #   end
+    #
+    # @example Protect all cached values from mutation
+    #   safe_memoize_options copy_on_read: true
+    #
+    # @param opts [Hash] any subset of {#memoize} options except mode-switch options
+    #   (+shared:+, +fiber_local:+, +ractor_safe:+, +shared_cache:+)
+    # @return [Hash] the stored defaults
+    # @raise [ArgumentError] for disallowed options
+    def safe_memoize_options(**opts)
+      disallowed = %i[shared fiber_local ractor_safe shared_cache]
+      bad = opts.keys & disallowed
+      unless bad.empty?
+        raise ArgumentError,
+          "safe_memoize_options does not accept #{bad.map { |k| ":#{k}" }.join(", ")} — pass mode-switch options per memoize call"
+      end
+      @__safe_memoize_defaults__ = opts.empty? ? nil : opts
     end
 
     # Memoizes every eligible public instance method defined directly on the class.
@@ -703,6 +787,10 @@ module SafeMemoize
 
     def __safe_memo_class_cache_bust_generators__
       @__safe_memo_class_cache_bust_generators__ ||= {}
+    end
+
+    def __safe_memoize_defaults__
+      @__safe_memoize_defaults__
     end
 
     # Resolves the effective first-element key sym for a given bare method name,

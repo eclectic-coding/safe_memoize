@@ -55,6 +55,9 @@ module SafeMemoize
   # Rescue this to catch any error raised by the library itself.
   class Error < StandardError; end
 
+  # @api private — sentinel distinguishing "not passed" from explicit nil/false in memoize kwargs
+  UNSET = Object.new.freeze
+
   # @api private
   SHARED_CACHE_REGISTRY = {}
   # @api private
