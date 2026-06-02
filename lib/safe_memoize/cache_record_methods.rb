@@ -22,8 +22,10 @@ module SafeMemoize
       Process.clock_gettime(Process::CLOCK_MONOTONIC) + ttl
     end
 
-    def memo_record(value, expires_at:)
-      {value: value, expires_at: expires_at, cached_at: Process.clock_gettime(Process::CLOCK_MONOTONIC)}
+    def memo_record(value, expires_at:, delta: nil)
+      rec = {value: value, expires_at: expires_at, cached_at: Process.clock_gettime(Process::CLOCK_MONOTONIC)}
+      rec[:delta] = delta if delta
+      rec
     end
 
     def memo_record_value(record)
