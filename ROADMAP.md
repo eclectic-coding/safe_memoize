@@ -4,17 +4,6 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 ---
 
-## v1.7.0 — Advanced Store Features
-
-*Goal: multi-process performance patterns for high-traffic deployments.*
-
-| Feature | Description | Status |
-|---|---|---|
-| Multi-level (L1/L2) caching | `store: [memory_store, redis_store]` — check in-process first, fall back to the remote store on miss, and promote to L1 on read; each level can have independent TTL and eviction settings | Shipped |
-| Stampede protection | Probabilistic early expiry (XFetch algorithm) for external stores; recomputes slightly before a TTL expires to prevent multiple processes hitting a cold miss simultaneously | Shipped |
-
----
-
 ## v2.0.0 — Next Generation (Long Horizon)
 
 *Goal: incorporate real-world usage feedback, clean up accumulated API surface, and open a path for advanced extension.*

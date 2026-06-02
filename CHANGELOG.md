@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-02
+
 ### Added
 
 - `SafeMemoize::Stores::Multilevel` — multi-level (L1/L2/…) cache store that checks faster layers first and promotes values from deeper layers into shallower ones on a miss ("read-through promotion"). Reads walk the list from first (fastest) to last; writes go to every level simultaneously; deletes and clears apply to all levels. Accepts `promote_expires_in:` to control the TTL of promoted entries (default: no TTL, relying on the L1 store's own eviction). Raises `ArgumentError` if fewer than two stores are supplied.
