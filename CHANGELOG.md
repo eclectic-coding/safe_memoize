@@ -8,6 +8,11 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Added
+
+- `safe_memoize_options(**opts)` class-level macro — sets default options for every subsequent `memoize` call on the class. Per-call options take precedence; class defaults take precedence over global `SafeMemoize.configure` defaults. Accepts all `memoize` options except mode-switch options (`shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:`), which must be specified per call. Call with no arguments to clear class-level defaults.
+- `copy_on_read: true` option on `memoize` — returns a `dup` (or `deep_dup` when available, e.g. ActiveRecord objects) of the cached value on every read, preventing callers from mutating shared cached state. `nil` and frozen values are returned as-is. Works across all cache paths (per-instance, LRU, shared, fiber-local, and external store). Incompatible with `ractor_safe:` (ractor-safe values are always frozen; use that guarantee instead). Can be set as a class default via `safe_memoize_options copy_on_read: true`.
+
 ## [1.3.0] - 2026-05-28
 
 ### Added

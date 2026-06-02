@@ -77,6 +77,8 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Named shared caches via `shared_cache: "name"` — cross-class cache sharing backed by a globally-registered store](#named-shared-caches)
 - [Automatic cache busting via `cache_bust:` — version-token-based invalidation; works with ActiveRecord `updated_at` and any comparable value](#automatic-cache-busting)
 - [Plugin / extension architecture — `SafeMemoize::Extension` DSL for adding custom `memoize` options and global lifecycle handlers without monkey-patching](#plugin--extension-architecture)
+- [Per-class default options via `safe_memoize_options` — set TTL, max size, copy-on-read, and other defaults for every `memoize` call on the class without repeating them](#per-class-default-options-safe_memoize_options)
+- [Copy-on-read via `copy_on_read: true` — returns a `dup`/`deep_dup` on every cache read to protect shared cached state from caller mutation](#copy-on-read)
 
 ## Installation
 
@@ -1372,6 +1374,83 @@ end
 
 [↑ Back to features](#features)
 
+## Per-class default options (`safe_memoize_options`)
+
+`safe_memoize_options` sets option defaults for every `memoize` call on the class, eliminating repetition when many methods share the same TTL, LRU cap, or other option. Per-call options still take precedence; class defaults take precedence over global `SafeMemoize.configure` defaults.
+
+```ruby
+class ApiClient
+  prepend SafeMemoize
+  safe_memoize_options ttl: 60, max_size: 200, copy_on_read: true
+
+  def fetch(id) = http.get(id)
+  memoize :fetch                     # uses ttl: 60, max_size: 200, copy_on_read: true
+
+  def list = http.get("/all")
+  memoize :list, ttl: 300            # uses max_size: 200, copy_on_read: true; ttl: 300 overrides
+end
+```
+
+Accepted options are the same as `memoize` minus the mode-switch options (`shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:`), which must be specified per call because they change the entire execution path:
+
+```ruby
+safe_memoize_options(
+  ttl:          60,
+  max_size:     100,
+  ttl_refresh:  true,
+  copy_on_read: true,
+  namespace:    "v2",
+  if:           ->(v) { v.present? },
+  cache_bust:   :updated_at
+)
+```
+
+Call with no arguments to clear all class-level defaults:
+
+```ruby
+MyClass.safe_memoize_options   # clears — subsequent memoize calls use global config or per-call options only
+```
+
+[↑ Back to features](#features)
+
+## Copy-on-read
+
+Pass `copy_on_read: true` to `memoize` to return a `dup` (or `deep_dup` when available, e.g. ActiveRecord objects) of the stored value on every cache read. This prevents callers from mutating the shared cached object:
+
+```ruby
+class ConfigService
+  prepend SafeMemoize
+
+  def settings = {host: "localhost", port: 8080}
+  memoize :settings, copy_on_read: true
+end
+
+svc = ConfigService.new
+result = svc.settings
+result[:host] = "mutated"   # only affects the caller's copy
+
+svc.settings[:host]         # => "localhost" — cache is unaffected
+```
+
+`nil` and frozen values are returned as-is (no dup attempted). `copy_on_read:` works across all cache paths: per-instance hash, LRU (`max_size:`), class-level shared (`shared: true`), fiber-local (`fiber_local: true`), and external stores. It is incompatible with `ractor_safe: true` (ractor-safe values are always frozen; rely on that guarantee instead).
+
+Set it as a class-wide default with `safe_memoize_options`:
+
+```ruby
+class ReportService
+  prepend SafeMemoize
+  safe_memoize_options copy_on_read: true
+
+  def summary = build_summary
+  memoize :summary
+
+  def details = build_details
+  memoize :details
+end
+```
+
+[↑ Back to features](#features)
+
 ## Ractor-safe shared cache
 
 Pass `ractor_safe: true` (together with `shared: true`) to replace the `Mutex`-backed class-level shared cache with a supervisor `Ractor` that owns the mutable cache hash. All reads and writes are serialised through message passing, so the cache is safe to use from multiple Ractors.
@@ -1531,6 +1610,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `namespace:` | `String \| nil` | `nil` | Namespace prefix prepended to the cache key's first element; must not contain `:`; takes precedence over the class-level and global namespace |
 | `shared_cache:` | `String \| nil` | `nil` | Name of a globally-registered shared store; incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:` |
 | `cache_bust:` | `Proc \| Symbol \| nil` | `nil` | Version-token callable; invoked on the instance at each lookup; token is folded into the key; incompatible with `key:` |
+| `copy_on_read:` | `Boolean` | `false` | Return a `dup`/`deep_dup` of the cached value on every read; protects shared state from caller mutation; nil and frozen values pass through; incompatible with `ractor_safe:` |
 | *(extension options)* | any | — | Unknown kwargs are validated against registered extensions; raise `ArgumentError` if unclaimed |
 
 ### `memoize_all` options (class method)
@@ -1543,6 +1623,12 @@ All `memoize` option keys above, plus:
 | `only:` | `Array<Symbol>` | `[]` |
 | `include_protected:` | `Boolean` | `false` |
 | `include_private:` | `Boolean` | `false` |
+
+### `safe_memoize_options` (class method)
+
+| Option key | Type | Default | Notes |
+|---|---|---|---|
+| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
 
 ### Instance methods (public)
 
