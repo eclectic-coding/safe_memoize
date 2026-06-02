@@ -64,6 +64,11 @@ module SafeMemoize
     #   itself. Prevents callers from mutating shared cached state. Frozen and +nil+
     #   values are returned as-is. Incompatible with +ractor_safe:+ (ractor values are
     #   always frozen; use that guarantee instead).
+    # @param group [Symbol, String, nil] assigns the method to a named invalidation
+    #   group. Call {PublicMethods#reset_memo_group} on an instance (or
+    #   {.reset_shared_memo_group} for shared-mode methods) to bust every method in the
+    #   group at once. A method may belong to at most one group; re-memoizing with a
+    #   different group moves it. Must be a non-empty Symbol or String.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -84,7 +89,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, **extension_options)
+    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, group: UNSET, **extension_options)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -126,6 +131,7 @@ module SafeMemoize
         copy_on_read = cls_defaults[:copy_on_read] if copy_on_read.equal?(UNSET) && cls_defaults.key?(:copy_on_read)
         namespace = cls_defaults[:namespace] if namespace.equal?(UNSET) && cls_defaults.key?(:namespace)
         store = cls_defaults[:store] if store.equal?(UNSET) && cls_defaults.key?(:store)
+        group = cls_defaults[:group] if group.equal?(UNSET) && cls_defaults.key?(:group)
       end
 
       # Normalize remaining UNSET to original per-call defaults
@@ -141,6 +147,7 @@ module SafeMemoize
       shared_cache = nil if shared_cache.equal?(UNSET)
       cache_bust = nil if cache_bust.equal?(UNSET)
       copy_on_read = false if copy_on_read.equal?(UNSET)
+      group = nil if group.equal?(UNSET)
       cond_if = nil if cond_if.equal?(UNSET)
       cond_unless = nil if cond_unless.equal?(UNSET)
 
@@ -211,6 +218,15 @@ module SafeMemoize
         raise ArgumentError, "namespace: must not be empty" if namespace.empty?
         raise ArgumentError, "namespace: must not contain ':'" if namespace.include?(":")
         __safe_memo_method_namespaces__[method_name] = namespace
+      end
+
+      if group
+        unless group.is_a?(Symbol) || group.is_a?(String)
+          raise ArgumentError, "group: must be a Symbol or String (got #{group.class})"
+        end
+        group = group.to_sym
+        raise ArgumentError, "group: must not be empty" if group.empty?
+        __safe_memo_register_group__(method_name, group)
       end
 
       if shared_cache
@@ -763,6 +779,35 @@ module SafeMemoize
       end
     end
 
+    # Clears all shared-cache entries for every method in the given group.
+    #
+    # Only affects methods memoized with +shared: true+. For per-instance cache
+    # invalidation use {PublicMethods#reset_memo_group} on the instance.
+    #
+    # @param group_name [Symbol, String]
+    # @return [void]
+    def reset_shared_memo_group(group_name)
+      group_name = group_name.to_sym
+      (__safe_memo_groups__[group_name] || []).each { |m| reset_shared_memo(m) }
+    end
+
+    # Returns the method names belonging to the given invalidation group, or an
+    # empty array when the group is unknown.
+    #
+    # @param group_name [Symbol, String]
+    # @return [Array<Symbol>]
+    def safe_memo_group_methods(group_name)
+      group_name = group_name.to_sym
+      (__safe_memo_groups__[group_name] || []).dup
+    end
+
+    # Returns all group names registered on this class.
+    #
+    # @return [Array<Symbol>]
+    def safe_memo_groups
+      __safe_memo_groups__.keys
+    end
+
     private
 
     def __safe_memo_shared_cache__
@@ -791,6 +836,17 @@ module SafeMemoize
 
     def __safe_memoize_defaults__
       @__safe_memoize_defaults__
+    end
+
+    def __safe_memo_groups__
+      @__safe_memo_groups__ ||= {}
+    end
+
+    def __safe_memo_register_group__(method_name, group)
+      groups = __safe_memo_groups__
+      # Remove method from any prior group it belonged to
+      groups.each_value { |methods| methods.delete(method_name) }
+      (groups[group] ||= []) << method_name
     end
 
     # Resolves the effective first-element key sym for a given bare method name,

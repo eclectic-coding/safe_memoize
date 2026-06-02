@@ -8,6 +8,18 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-02
+
+### Added
+
+- `group:` option on `memoize` — assigns a method to a named invalidation group (`memoize :find, group: :database`). Groups are stored on the class and survive re-memoization; a method can belong to at most one group at a time (re-memoizing with a different group moves it). Accepts any non-empty Symbol or String. Can be set as a class default via `safe_memoize_options group: :my_group`.
+- `reset_memo_group(group_name)` instance method — clears all per-instance cached entries for every method in the named group in a single call; each evicted entry fires the `:on_evict` hook. A no-op for unknown groups.
+- `reset_shared_memo_group(group_name)` class method — the shared-cache equivalent of `reset_memo_group`; clears all shared-cache entries for every method in the group that was memoized with `shared: true`.
+- `memo_group_methods(group_name)` instance method — returns the array of method names belonging to the given group on the instance's class (empty array for unknown groups).
+- `memo_groups` instance method — returns all group names registered on the instance's class.
+- `safe_memo_group_methods(group_name)` class method — class-level equivalent of `memo_group_methods`.
+- `safe_memo_groups` class method — class-level equivalent of `memo_groups`.
+
 ## [1.4.0] - 2026-06-02
 
 ### Added

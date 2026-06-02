@@ -10,7 +10,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 | Feature | Description | Status |
 |---|---|---|
-| Memoization groups | `memoize :find, group: :database` then `reset_memo_group(:database)` to invalidate all methods tagged with the same group at once; groups can span multiple methods on the same class | Planned |
+| Memoization groups | `memoize :find, group: :database` then `reset_memo_group(:database)` to invalidate all methods tagged with the same group at once; groups can span multiple methods on the same class | Shipped |
 
 ---
 

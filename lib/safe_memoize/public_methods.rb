@@ -359,6 +359,37 @@ module SafeMemoize
       end
     end
 
+    # Clears all per-instance cached entries for every method belonging to the
+    # given invalidation group (declared via +memoize :method, group: :name+).
+    #
+    # A no-op when the group is unknown or has no members. Each evicted entry
+    # fires the +:on_evict+ hook. For shared-mode methods use the class-level
+    # {ClassMethods.reset_shared_memo_group} instead.
+    #
+    # @param group_name [Symbol, String]
+    # @return [void]
+    def reset_memo_group(group_name)
+      group_name = group_name.to_sym
+      (self.class.send(:__safe_memo_groups__)[group_name] || []).each { |m| reset_memo(m) }
+    end
+
+    # Returns the method names belonging to the given invalidation group on
+    # this instance's class, or an empty array when the group is unknown.
+    #
+    # @param group_name [Symbol, String]
+    # @return [Array<Symbol>]
+    def memo_group_methods(group_name)
+      group_name = group_name.to_sym
+      (self.class.send(:__safe_memo_groups__)[group_name] || []).dup
+    end
+
+    # Returns all invalidation group names registered on this instance's class.
+    #
+    # @return [Array<Symbol>]
+    def memo_groups
+      self.class.send(:__safe_memo_groups__).keys
+    end
+
     # Clears all cached entries for every method on this instance.
     # Each evicted entry fires the +:on_evict+ hook.
     #

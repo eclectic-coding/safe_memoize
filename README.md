@@ -79,6 +79,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Plugin / extension architecture — `SafeMemoize::Extension` DSL for adding custom `memoize` options and global lifecycle handlers without monkey-patching](#plugin--extension-architecture)
 - [Per-class default options via `safe_memoize_options` — set TTL, max size, copy-on-read, and other defaults for every `memoize` call on the class without repeating them](#per-class-default-options-safe_memoize_options)
 - [Copy-on-read via `copy_on_read: true` — returns a `dup`/`deep_dup` on every cache read to protect shared cached state from caller mutation](#copy-on-read)
+- [Cache invalidation groups via `group:` — tag related methods with a group name and bust them all with a single `reset_memo_group` call](#cache-invalidation-groups)
 
 ## Installation
 
@@ -191,6 +192,79 @@ obj.reset_memo(:find_user, 42)                  # Clears only the cached call fo
 obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword combination
 obj.reset_all_memos                             # Clears all memoized values
 ```
+
+[↑ Back to features](#features)
+
+### Cache invalidation groups
+
+Tag related methods with `group:` and bust them all at once with a single `reset_memo_group` call:
+
+```ruby
+class RepoService
+  prepend SafeMemoize
+
+  def find_user(id) = db.query("SELECT * FROM users WHERE id=?", id)
+  def find_post(id) = db.query("SELECT * FROM posts WHERE id=?", id)
+  def site_config    = db.query("SELECT * FROM config LIMIT 1")
+
+  memoize :find_user,  group: :database
+  memoize :find_post,  group: :database
+  memoize :site_config                    # no group — unaffected by group reset
+end
+
+svc = RepoService.new
+svc.find_user(1)
+svc.find_post(42)
+svc.site_config
+
+svc.reset_memo_group(:database)          # invalidates find_user and find_post only
+svc.memoized?(:site_config)              # => true — unaffected
+```
+
+For `shared: true` methods, use the class method:
+
+```ruby
+class CatalogService
+  prepend SafeMemoize
+
+  def products = fetch_all_products
+  def categories = fetch_all_categories
+
+  memoize :products,   shared: true, group: :catalog
+  memoize :categories, shared: true, group: :catalog
+end
+
+CatalogService.reset_shared_memo_group(:catalog)    # clears shared cache for both methods
+```
+
+#### Introspection
+
+```ruby
+svc.memo_groups                              # => [:database]  — all groups on the class
+svc.memo_group_methods(:database)            # => [:find_user, :find_post]
+CatalogService.safe_memo_groups              # => [:catalog]
+CatalogService.safe_memo_group_methods(:catalog)  # => [:products, :categories]
+```
+
+#### Class-wide group default
+
+Use `safe_memoize_options` to assign all subsequently memoized methods to the same group:
+
+```ruby
+class ApiClient
+  prepend SafeMemoize
+  safe_memoize_options group: :api
+
+  def users  = http.get("/users")
+  def orders = http.get("/orders")
+
+  memoize :users               # group: :api
+  memoize :orders              # group: :api
+  memoize :health, group: nil  # override — no group
+end
+```
+
+A method belongs to at most one group at a time; re-memoizing with a different `group:` moves it.
 
 [↑ Back to features](#features)
 
@@ -1611,6 +1685,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `shared_cache:` | `String \| nil` | `nil` | Name of a globally-registered shared store; incompatible with `shared:`, `store:`, `fiber_local:`, `ractor_safe:`, and `max_size:` |
 | `cache_bust:` | `Proc \| Symbol \| nil` | `nil` | Version-token callable; invoked on the instance at each lookup; token is folded into the key; incompatible with `key:` |
 | `copy_on_read:` | `Boolean` | `false` | Return a `dup`/`deep_dup` of the cached value on every read; protects shared state from caller mutation; nil and frozen values pass through; incompatible with `ractor_safe:` |
+| `group:` | `Symbol \| String \| nil` | `nil` | Assigns the method to a named invalidation group; call `reset_memo_group` / `reset_shared_memo_group` to bust all methods in the group at once; a method belongs to at most one group |
 | *(extension options)* | any | — | Unknown kwargs are validated against registered extensions; raise `ArgumentError` if unclaimed |
 
 ### `memoize_all` options (class method)
@@ -1628,7 +1703,7 @@ All `memoize` option keys above, plus:
 
 | Option key | Type | Default | Notes |
 |---|---|---|---|
-| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
+| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`, `group:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
 
 ### Instance methods (public)
 
@@ -1650,9 +1725,17 @@ All `memoize` option keys above, plus:
 | Method | Returns |
 |---|---|
 | `reset_memo(method_name, *args, **kwargs)` | `nil` |
+| `reset_memo_group(group_name)` | `nil` |
 | `reset_all_memos` | `nil` |
 | `memo_touch(method_name, *args, ttl: nil, **kwargs)` | `Boolean` |
 | `memo_refresh(method_name, *args, **kwargs)` | cached value |
+
+**Group introspection**
+
+| Method | Returns |
+|---|---|
+| `memo_groups` | `Array<Symbol>` — all group names on the class |
+| `memo_group_methods(group_name)` | `Array<Symbol>` — methods in the group |
 
 **Warm-up and persistence**
 
@@ -1705,10 +1788,18 @@ All `memoize` option keys above, plus:
 |---|---|
 | `reset_shared_memo(method_name, *args, **kwargs)` | `nil` |
 | `reset_all_shared_memos` | `nil` |
+| `reset_shared_memo_group(group_name)` | `nil` |
 | `shared_memoized?(method_name, *args, **kwargs)` | `Boolean` |
 | `shared_memo_count(method_name = nil)` | `Integer` |
 | `shared_memo_age(method_name, *args, **kwargs)` | `Numeric \| nil` |
 | `shared_memo_stale?(method_name, *args, **kwargs)` | `Boolean` |
+
+### Group class methods (available on any class that uses `group:`)
+
+| Method | Returns |
+|---|---|
+| `safe_memo_groups` | `Array<Symbol>` — all group names on the class |
+| `safe_memo_group_methods(group_name)` | `Array<Symbol>` — methods belonging to the group |
 
 **Ractor-safe shared cache (added when any method uses `ractor_safe: true`)**
 
