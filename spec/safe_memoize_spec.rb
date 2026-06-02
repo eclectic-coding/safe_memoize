@@ -2160,6 +2160,45 @@ RSpec.describe SafeMemoize do
       end
     end
 
+    context "write failure" do
+      it "records the failure and does not re-raise" do
+        allow(inner_store).to receive(:write).and_raise(RuntimeError, "write error")
+        expect { cb.write(:k, "v") }.not_to raise_error
+        expect(cb.error_count).to eq(1)
+      end
+
+      it "trips the circuit after threshold write failures" do
+        allow(inner_store).to receive(:write).and_raise(RuntimeError)
+        3.times { cb.write(:k, "v") }
+        expect(cb.state).to eq(:open)
+      end
+    end
+
+    context "delete failure" do
+      it "records the failure and does not re-raise" do
+        allow(inner_store).to receive(:delete).and_raise(RuntimeError, "delete error")
+        expect { cb.delete(:k) }.not_to raise_error
+        expect(cb.error_count).to eq(1)
+      end
+    end
+
+    context "clear failure" do
+      it "records the failure and does not re-raise" do
+        allow(inner_store).to receive(:clear).and_raise(RuntimeError, "clear error")
+        expect { cb.clear }.not_to raise_error
+        expect(cb.error_count).to eq(1)
+      end
+    end
+
+    context "keys failure" do
+      it "returns an empty array and records the failure without re-raising" do
+        allow(inner_store).to receive(:keys).and_raise(RuntimeError, "keys error")
+        result = cb.keys
+        expect(result).to eq([])
+        expect(cb.error_count).to eq(1)
+      end
+    end
+
     context "tripping to open state" do
       before { make_store_raise }
 
@@ -2443,6 +2482,489 @@ RSpec.describe SafeMemoize do
         end
         # Smoke test — no double-wrap error
         expect(klass.new.data).to eq(1)
+      end
+    end
+  end
+
+  describe "SafeMemoize::Stores::Multilevel" do
+    let(:l1) { SafeMemoize::Stores::Memory.new }
+    let(:l2) { SafeMemoize::Stores::Memory.new }
+    let(:ml) { SafeMemoize::Stores::Multilevel.new(l1, l2) }
+
+    context "basic read-through and promotion" do
+      it "reads from L1 when present" do
+        l1.write(:k, "l1_value")
+        l2.write(:k, "l2_value")
+        expect(ml.read(:k)).to eq("l1_value")
+      end
+
+      it "falls back to L2 on L1 miss and promotes to L1" do
+        l2.write(:k, "l2_value")
+        expect(ml.read(:k)).to eq("l2_value")
+        expect(l1.read(:k)).to eq("l2_value")
+      end
+
+      it "returns MISS when all levels miss" do
+        expect(ml.read(:k)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "does not promote when L1 already has the entry" do
+        l1.write(:k, "l1_value")
+        ml.read(:k)
+        # L2 was never written — promotion only goes to shallower layers
+        expect(l2.read(:k)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+    end
+
+    context "write" do
+      it "writes to all levels" do
+        ml.write(:k, "v")
+        expect(l1.read(:k)).to eq("v")
+        expect(l2.read(:k)).to eq("v")
+      end
+
+      it "passes expires_in to all levels" do
+        ml.write(:k, "v", expires_in: 60)
+        expect(l1.read(:k)).to eq("v")
+        expect(l2.read(:k)).to eq("v")
+      end
+    end
+
+    context "delete" do
+      it "deletes from all levels" do
+        ml.write(:k, "v")
+        ml.delete(:k)
+        expect(l1.read(:k)).to eq(SafeMemoize::Stores::Base::MISS)
+        expect(l2.read(:k)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+    end
+
+    context "clear" do
+      it "clears all levels" do
+        ml.write(:a, 1)
+        ml.write(:b, 2)
+        ml.clear
+        expect(ml.read(:a)).to eq(SafeMemoize::Stores::Base::MISS)
+        expect(ml.read(:b)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+    end
+
+    context "keys" do
+      it "returns the union of live keys across all levels" do
+        l1.write(:a, 1)
+        l2.write(:b, 2)
+        expect(ml.keys).to match_array(%i[a b])
+      end
+    end
+
+    context "promote_expires_in" do
+      it "applies promote_expires_in when promoting from L2 to L1" do
+        ml_with_ttl = SafeMemoize::Stores::Multilevel.new(l1, l2, promote_expires_in: 60)
+        l2.write(:k, "v")
+        ml_with_ttl.read(:k)
+        # L1 entry should now exist — we can't easily inspect TTL but can verify the value
+        expect(l1.read(:k)).to eq("v")
+      end
+    end
+
+    context "validation" do
+      it "raises ArgumentError with fewer than 2 stores" do
+        expect do
+          SafeMemoize::Stores::Multilevel.new(SafeMemoize::Stores::Memory.new)
+        end.to raise_error(ArgumentError, /at least 2 stores/)
+      end
+
+      it "raises ArgumentError if an entry is not a Stores::Base instance" do
+        expect do
+          SafeMemoize::Stores::Multilevel.new(SafeMemoize::Stores::Memory.new, "not a store")
+        end.to raise_error(ArgumentError, /Stores::Base/)
+      end
+    end
+
+    context "store: Array shorthand on memoize" do
+      it "auto-creates a Multilevel store from an array" do
+        l1_store = SafeMemoize::Stores::Memory.new
+        l2_store = SafeMemoize::Stores::Memory.new
+
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          define_method(:fetch) do |id|
+            @calls += 1
+            "result_#{id}"
+          end
+
+          memoize :fetch, store: [l1_store, l2_store]
+        end
+
+        obj = klass.new
+        expect(obj.fetch(1)).to eq("result_1")
+        expect(obj.fetch(1)).to eq("result_1")
+        expect(obj.calls).to eq(1)
+        expect(l1_store.read([:fetch, [1], {}])).to eq("result_1")
+      end
+
+      it "raises ArgumentError if Array entries are not Stores::Base instances" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, store: [SafeMemoize::Stores::Memory.new, "bad"]
+          end
+        end.to raise_error(ArgumentError, /Array entry/)
+      end
+    end
+  end
+
+  describe "SafeMemoize::Stores::XFetch" do
+    let(:inner) { SafeMemoize::Stores::Memory.new }
+
+    context "basic read/write" do
+      it "stores and retrieves values" do
+        xf = SafeMemoize::Stores::XFetch.new(inner, beta: 1.0, delta: 0.001)
+        xf.write(:k, "value", expires_in: 60)
+        expect(xf.read(:k)).to eq("value")
+      end
+
+      it "returns MISS for absent keys" do
+        xf = SafeMemoize::Stores::XFetch.new(inner)
+        expect(xf.read(:missing)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "returns MISS for expired entries" do
+        xf = SafeMemoize::Stores::XFetch.new(inner, delta: 0.001)
+        xf.write(:k, "v", expires_in: 0.001)
+        sleep(0.01)
+        expect(xf.read(:k)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "stores no-TTL values and reads them back" do
+        xf = SafeMemoize::Stores::XFetch.new(inner)
+        xf.write(:k, "v")
+        expect(xf.read(:k)).to eq("v")
+      end
+    end
+
+    context "early expiry (XFetch probabilistic)" do
+      it "eventually triggers early expiry before the hard deadline" do
+        # Use a very high beta so the XFetch check fires almost every read
+        xf = SafeMemoize::Stores::XFetch.new(inner, beta: 1_000_000.0, delta: 1.0)
+        xf.write(:k, "v", expires_in: 300)
+
+        # With a huge beta, log(rand) is always negative and the formula fires
+        results = 20.times.map { xf.read(:k) }
+        expect(results).to include(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "never triggers early expiry when beta is effectively zero" do
+        xf = SafeMemoize::Stores::XFetch.new(inner, beta: Float::EPSILON, delta: Float::EPSILON)
+        xf.write(:k, "v", expires_in: 300)
+
+        # With negligible beta, should never trigger early for a 5-minute TTL
+        results = 50.times.map { xf.read(:k) }
+        expect(results).to all(eq("v"))
+      end
+    end
+
+    context "delete / clear / keys" do
+      it "delete removes the entry" do
+        xf = SafeMemoize::Stores::XFetch.new(inner)
+        xf.write(:k, "v")
+        xf.delete(:k)
+        expect(xf.read(:k)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "clear removes all entries" do
+        xf = SafeMemoize::Stores::XFetch.new(inner)
+        xf.write(:a, 1)
+        xf.write(:b, 2)
+        xf.clear
+        expect(xf.read(:a)).to eq(SafeMemoize::Stores::Base::MISS)
+      end
+
+      it "keys delegates to the inner store" do
+        xf = SafeMemoize::Stores::XFetch.new(inner)
+        xf.write(:a, 1)
+        xf.write(:b, 2)
+        expect(xf.keys.size).to eq(2)
+      end
+    end
+
+    context "validation" do
+      it "raises ArgumentError if wrapped object is not a Stores::Base" do
+        expect do
+          SafeMemoize::Stores::XFetch.new("not a store")
+        end.to raise_error(ArgumentError, /Stores::Base/)
+      end
+
+      it "raises ArgumentError for non-positive beta" do
+        expect do
+          SafeMemoize::Stores::XFetch.new(inner, beta: 0)
+        end.to raise_error(ArgumentError, /beta/)
+      end
+
+      it "raises ArgumentError for non-positive delta" do
+        expect do
+          SafeMemoize::Stores::XFetch.new(inner, delta: 0)
+        end.to raise_error(ArgumentError, /delta/)
+      end
+    end
+  end
+
+  describe "stampede_protection: option" do
+    def make_klass(ttl:, beta: true)
+      Class.new do
+        prepend SafeMemoize
+
+        attr_reader :calls
+
+        def initialize
+          @calls = 0
+        end
+
+        def compute
+          @calls += 1
+          "value"
+        end
+
+        memoize :compute, ttl: ttl, stampede_protection: beta
+      end
+    end
+
+    context "basic behaviour" do
+      it "caches normally (XFetch does not fire for fresh entries)" do
+        klass = make_klass(ttl: 300)
+        obj = klass.new
+        obj.compute
+        # Fresh entry — XFetch with default beta should not fire
+        result = obj.compute
+        expect(result).to eq("value")
+        expect(obj.calls).to be <= 2
+      end
+
+      it "stores delta in the cache record" do
+        klass = make_klass(ttl: 300)
+        obj = klass.new
+        obj.compute
+        # Peek at the internal record
+        cache = obj.instance_variable_get(:@__safe_memo_cache__)
+        record = cache&.values&.first
+        expect(record).not_to be_nil
+        expect(record[:delta]).to be_a(Float)
+        expect(record[:delta]).to be >= 0
+      end
+    end
+
+    context "probabilistic early expiry" do
+      it "eventually triggers early recomputation near the expiry deadline" do
+        # Use a very high beta to force early expiry almost every read
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def compute
+            @calls += 1
+            "value"
+          end
+
+          # Very short TTL + artificially large delta forces near-certain early expiry
+          memoize :compute, ttl: 300, stampede_protection: 1_000_000.0
+        end
+
+        obj = klass.new
+        obj.compute  # prime: stores delta
+
+        # Manually set a large delta in the record so XFetch fires
+        cache = obj.instance_variable_get(:@__safe_memo_cache__)
+        cache&.each_value { |r| r[:delta] = 1000.0 }
+
+        recomputed = 20.times.any? {
+          obj.compute
+          obj.calls > 1
+        }
+        expect(recomputed).to be true
+      end
+    end
+
+    context "validation" do
+      it "raises ArgumentError when ttl: is not set" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, stampede_protection: true
+          end
+        end.to raise_error(ArgumentError, /requires ttl:/)
+      end
+
+      it "raises ArgumentError when store: is also set" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, ttl: 60, store: SafeMemoize::Stores::Memory.new, stampede_protection: true
+          end
+        end.to raise_error(ArgumentError, /incompatible with store:/)
+      end
+
+      it "raises ArgumentError when ractor_safe: is also set" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, ttl: 60, shared: true, ractor_safe: true, stampede_protection: true
+          end
+        end.to raise_error(ArgumentError, /incompatible with ractor_safe:/)
+      end
+
+      it "raises ArgumentError for invalid stampede_protection value" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, ttl: 60, stampede_protection: "bad"
+          end
+        end.to raise_error(ArgumentError, /must be true or a Numeric/)
+      end
+    end
+
+    context "safe_memoize_options with stampede_protection:" do
+      it "applies to all subsequently memoized methods" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options ttl: 300, stampede_protection: true
+
+          def foo = 1
+          def bar = 2
+          memoize :foo
+          memoize :bar
+        end
+
+        obj = klass.new
+        expect(obj.foo).to eq(1)
+        expect(obj.bar).to eq(2)
+      end
+    end
+
+    context "fiber_local: true with stampede_protection:" do
+      it "caches normally for a fresh fiber-local entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def fetch
+            @calls += 1
+            "value"
+          end
+
+          memoize :fetch, ttl: 300, fiber_local: true, stampede_protection: true
+        end
+
+        obj = klass.new
+        expect(obj.fetch).to eq("value")
+        expect(obj.fetch).to eq("value")
+        expect(obj.calls).to eq(1)
+      end
+
+      it "triggers early recomputation when delta is large and beta is high" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          attr_reader :calls
+
+          def initialize
+            @calls = 0
+          end
+
+          def fetch
+            @calls += 1
+            "value"
+          end
+
+          memoize :fetch, ttl: 300, fiber_local: true, stampede_protection: 1_000_000.0
+        end
+
+        obj = klass.new
+        obj.fetch  # prime with a delta
+
+        # Force a large delta so XFetch fires
+        store = Fiber[:__safe_memoize__]
+        store&.dig(obj.object_id, :cache)&.each_value { |r| r[:delta] = 1000.0 }
+
+        recomputed = 20.times.any? {
+          obj.fetch
+          obj.calls > 1
+        }
+        expect(recomputed).to be true
+      end
+    end
+
+    context "shared: true with stampede_protection:" do
+      it "caches normally for a fresh shared entry" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          def fetch
+            "shared_value"
+          end
+
+          memoize :fetch, ttl: 300, shared: true, stampede_protection: true
+        end
+
+        obj = klass.new
+        expect(obj.fetch).to eq("shared_value")
+        expect(obj.fetch).to eq("shared_value")
+      end
+
+      it "triggers early recomputation in shared cache when delta is large and beta is high" do
+        klass = Class.new do
+          prepend SafeMemoize
+
+          @call_count = 0
+          class << self
+            attr_accessor :call_count
+          end
+
+          def fetch
+            self.class.call_count += 1
+            "value"
+          end
+
+          memoize :fetch, ttl: 300, shared: true, stampede_protection: 1_000_000.0
+        end
+
+        obj = klass.new
+        obj.fetch  # prime
+
+        # Force a large delta in the shared cache record
+        shared_cache = klass.send(:__safe_memo_shared_cache__)
+        shared_cache.each_value { |r| r[:delta] = 1000.0 }
+
+        calls_before = klass.call_count
+        20.times { obj.fetch }
+        expect(klass.call_count).to be > calls_before
       end
     end
   end

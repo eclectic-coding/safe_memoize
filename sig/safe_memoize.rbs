@@ -66,7 +66,7 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, ?group: Symbol | String | nil, ?circuit_breaker: bool | Hash[Symbol, untyped] | nil, **untyped extension_options) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base | Array[Stores::Base] | nil, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, ?group: Symbol | String | nil, ?circuit_breaker: bool | Hash[Symbol, untyped] | nil, ?stampede_protection: bool | Numeric | nil, **untyped extension_options) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
     def safe_memoize_namespace: () -> String?
@@ -148,7 +148,7 @@ module SafeMemoize
 
     def memo_ttl: (Numeric? ttl) -> Float?
     def memo_expires_at: (Float? ttl) -> Float?
-    def memo_record: (untyped value, expires_at: Float?) -> memo_record
+    def memo_record: (untyped value, expires_at: Float?, ?delta: Float?) -> memo_record
     def memo_record_value: (memo_record record) -> untyped
     def memo_record_live?: (memo_record? record) -> bool
     def memo_prune_expired_entries!: (Hash[memo_key, memo_record] cache) -> void
@@ -299,6 +299,38 @@ module SafeMemoize
       private
 
       def expired?: ({ expires_at: Float?, value: untyped, cached_at: Float }) -> bool
+    end
+
+    class Multilevel < Base
+      attr_reader stores: Array[Base]
+
+      def initialize: (*Base stores, ?promote_expires_in: Numeric?) -> void
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+    end
+
+    class XFetch < Base
+      ENVELOPE_KEY: Symbol
+      DEFAULT_BETA: Float
+      DEFAULT_DELTA: Float
+
+      attr_reader wrapped_store: Base
+      attr_reader beta: Float
+      attr_reader delta: Float
+
+      def initialize: (Base store, ?beta: Numeric, ?delta: Numeric) -> void
+      def read: (untyped key) -> untyped
+      def write: (untyped key, untyped value, ?expires_in: Numeric?) -> void
+      def delete: (untyped key) -> void
+      def clear: () -> void
+      def keys: () -> Array[untyped]
+
+      private
+
+      def envelope?: (untyped value) -> bool
     end
 
     class CircuitBreaker < Base

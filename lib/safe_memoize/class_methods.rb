@@ -74,6 +74,12 @@ module SafeMemoize
     #   +probe_interval: 30+), or a +Hash+ with +:error_threshold+ and/or +:probe_interval+
     #   keys to customise. Requires a +store:+ to be set (per-method, class-level, or
     #   global default); raises +ArgumentError+ otherwise.
+    # @param stampede_protection [Boolean, Numeric, nil] enables probabilistic early
+    #   expiry (XFetch algorithm) on the per-instance in-process cache. Pass +true+ to
+    #   use the default beta scalar (1.0), or a +Numeric+ to set a custom beta. A higher
+    #   beta causes early recomputation to trigger more aggressively. Requires +ttl:+ to
+    #   be set. Incompatible with +store:+ (use {Stores::XFetch} instead) and
+    #   +ractor_safe:+. For the store-backed path, wrap the store with {Stores::XFetch}.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -94,7 +100,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, group: UNSET, circuit_breaker: UNSET, **extension_options)
+    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, group: UNSET, circuit_breaker: UNSET, stampede_protection: UNSET, **extension_options)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -138,6 +144,7 @@ module SafeMemoize
         store = cls_defaults[:store] if store.equal?(UNSET) && cls_defaults.key?(:store)
         group = cls_defaults[:group] if group.equal?(UNSET) && cls_defaults.key?(:group)
         circuit_breaker = cls_defaults[:circuit_breaker] if circuit_breaker.equal?(UNSET) && cls_defaults.key?(:circuit_breaker)
+        stampede_protection = cls_defaults[:stampede_protection] if stampede_protection.equal?(UNSET) && cls_defaults.key?(:stampede_protection)
       end
 
       # Normalize remaining UNSET to original per-call defaults
@@ -155,6 +162,7 @@ module SafeMemoize
       copy_on_read = false if copy_on_read.equal?(UNSET)
       group = nil if group.equal?(UNSET)
       circuit_breaker = nil if circuit_breaker.equal?(UNSET)
+      stampede_protection = nil if stampede_protection.equal?(UNSET)
       cond_if = nil if cond_if.equal?(UNSET)
       cond_unless = nil if cond_unless.equal?(UNSET)
 
@@ -197,6 +205,24 @@ module SafeMemoize
           raise ArgumentError, "cache_bust: must be a callable or Symbol (got #{cache_bust.class})"
         end
         raise ArgumentError, "cache_bust: and key: cannot be combined" if key
+      end
+
+      if store.is_a?(Array)
+        store.each_with_index do |s, i|
+          unless s.is_a?(SafeMemoize::Stores::Base)
+            raise ArgumentError, "store: Array entry [#{i}] must be a Stores::Base instance (got #{s.class})"
+          end
+        end
+        store = SafeMemoize::Stores::Multilevel.new(*store)
+      end
+
+      if stampede_protection
+        unless stampede_protection == true || stampede_protection.is_a?(Numeric)
+          raise ArgumentError, "stampede_protection: must be true or a Numeric beta value (got #{stampede_protection.class})"
+        end
+        raise ArgumentError, "stampede_protection: requires ttl: to be set" if ttl.nil?
+        raise ArgumentError, "stampede_protection: is incompatible with store: — use Stores::XFetch instead" if store
+        raise ArgumentError, "stampede_protection: is incompatible with ractor_safe:" if ractor_safe
       end
 
       if store
@@ -354,7 +380,15 @@ module SafeMemoize
             fiber_cache = fiber_memo_cache!
             record = fiber_cache[cache_key]
 
-            if memo_record_live?(record)
+            sp_early = stampede_protection && memo_record_live?(record) && record[:expires_at] &&
+              (record[:delta].to_f > 0) &&
+              begin
+                sp_beta = stampede_protection.is_a?(Numeric) ? stampede_protection.to_f : 1.0
+                now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+                now - record[:delta].to_f * sp_beta * Math.log(rand) >= record[:expires_at]
+              end
+
+            if memo_record_live?(record) && !sp_early
               if max_size
                 lru = fiber_memo_lru![method_name] ||= {}
                 lru.delete(cache_key)
@@ -365,7 +399,7 @@ module SafeMemoize
               call_memo_hooks(:on_hit, cache_key, record)
               dup_fn.call(memo_record_value(record))
             else
-              call_memo_hooks(:on_expire, cache_key, record) if record
+              call_memo_hooks(:on_expire, cache_key, record) if record && (!memo_record_live?(record) || sp_early)
 
               start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
               value = Adapters::OpenTelemetry.trace(
@@ -373,7 +407,7 @@ module SafeMemoize
               ) { super(*args, **kwargs) }
               elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-              new_record = memo_record(value, expires_at: memo_expires_at(ttl))
+              new_record = memo_record(value, expires_at: memo_expires_at(ttl), delta: stampede_protection ? elapsed_time : nil)
 
               if !condition || condition.call(value)
                 if max_size
@@ -432,7 +466,14 @@ module SafeMemoize
               now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
               record_live = record && (record[:expires_at].nil? || record[:expires_at] > now)
 
-              if record_live
+              sp_early = record_live && stampede_protection && record[:expires_at] &&
+                (record[:delta].to_f > 0) &&
+                begin
+                  sp_beta = stampede_protection.is_a?(Numeric) ? stampede_protection.to_f : 1.0
+                  now - record[:delta].to_f * sp_beta * Math.log(rand) >= record[:expires_at]
+                end
+
+              if record_live && !sp_early
                 if max_size
                   lru = klass.send(:__safe_memo_shared_lru_order__)[method_name] ||= {}
                   lru.delete(cache_key)
@@ -443,13 +484,13 @@ module SafeMemoize
                 call_memo_hooks(:on_hit, cache_key, record)
                 dup_fn.call(record[:value])
               else
-                call_memo_hooks(:on_expire, cache_key, record) if record && !record_live
+                call_memo_hooks(:on_expire, cache_key, record) if record && (!record_live || sp_early)
 
                 start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
                 value = Adapters::OpenTelemetry.trace(SafeMemoize.configuration.opentelemetry_tracer, method_name, klass.name) { super(*args, **kwargs) }
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-                new_record = memo_record(value, expires_at: memo_expires_at(ttl))
+                new_record = memo_record(value, expires_at: memo_expires_at(ttl), delta: stampede_protection ? elapsed_time : nil)
 
                 if !condition || condition.call(value)
                   if max_size
@@ -493,10 +534,22 @@ module SafeMemoize
 
           cache_key = compute_cache_key(method_name, args, kwargs)
 
-          if max_size || condition || ttl_refresh
-            # Locked path: used when LRU tracking, conditional storage, or TTL refresh is needed.
+          if max_size || condition || ttl_refresh || stampede_protection
+            # Locked path: LRU, conditional storage, TTL refresh, or stampede protection.
+            sp_beta = stampede_protection.is_a?(Numeric) ? stampede_protection.to_f : 1.0
+
             memo_mutex!.synchronize do
               record = memo_cache_record(cache_key)
+
+              if record && stampede_protection && record[:expires_at]
+                now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+                delta = record[:delta].to_f
+                if delta > 0 && now - delta * sp_beta * Math.log(rand) >= record[:expires_at]
+                  call_memo_hooks(:on_expire, cache_key, record)
+                  record = nil
+                end
+              end
+
               if record
                 lru_touch(method_name, cache_key) if max_size
                 record[:expires_at] = memo_expires_at(ttl) if ttl_refresh
@@ -508,7 +561,7 @@ module SafeMemoize
                 value = Adapters::OpenTelemetry.trace(SafeMemoize.configuration.opentelemetry_tracer, method_name, self.class.name) { super(*args, **kwargs) }
                 elapsed_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-                new_record = memo_record(value, expires_at: memo_expires_at(ttl))
+                new_record = memo_record(value, expires_at: memo_expires_at(ttl), delta: stampede_protection ? elapsed_time : nil)
                 if !condition || condition.call(value)
                   lru_evict_if_over_limit(method_name, max_size) if max_size
                   @__safe_memo_cache__ ||= {}
