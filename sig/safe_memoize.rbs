@@ -17,6 +17,7 @@ module SafeMemoize
   @__safe_memo_shared_cache__: Hash[memo_key, memo_record]?
   @__safe_memo_shared_mutex__: Mutex?
   @__safe_memo_shared_lru_order__: Hash[Symbol, Hash[memo_key, true]]?
+  @__safe_memo_groups__: Hash[Symbol, Array[Symbol]]?
 
   UNSET: untyped
   SHARED_CACHE_REGISTRY: Hash[String, Stores::Base]
@@ -65,7 +66,7 @@ module SafeMemoize
   end
 
   module ClassMethods
-    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, **untyped extension_options) -> void
+    def memoize: (Symbol | String method_name, ?ttl: Numeric?, ?max_size: Integer?, ?ttl_refresh: bool, ?if: (^(untyped result) -> boolish)?, ?unless: (^(untyped result) -> boolish)?, ?shared: bool, ?key: (^(*untyped args, **untyped kwargs) -> untyped)?, ?store: Stores::Base?, ?fiber_local: bool, ?ractor_safe: bool, ?namespace: String?, ?shared_cache: String?, ?cache_bust: (^() -> untyped) | Symbol | nil, ?copy_on_read: bool, ?group: Symbol | String | nil, **untyped extension_options) -> void
     def safe_memoize_store: () -> Stores::Base?
     def safe_memoize_store=: (Stores::Base?) -> Stores::Base?
     def safe_memoize_namespace: () -> String?
@@ -78,6 +79,9 @@ module SafeMemoize
     def shared_memo_count: (?Symbol | String method_name) -> Integer
     def shared_memo_age: (Symbol | String method_name, *untyped args, **untyped kwargs) -> Float?
     def shared_memo_stale?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
+    def reset_shared_memo_group: (Symbol | String group_name) -> void
+    def safe_memo_group_methods: (Symbol | String group_name) -> Array[Symbol]
+    def safe_memo_groups: () -> Array[Symbol]
 
     private
 
@@ -88,6 +92,8 @@ module SafeMemoize
     def __safe_memo_method_namespaces__: () -> Hash[Symbol, String]
     def __safe_memo_class_cache_bust_generators__: () -> Hash[Symbol, Proc | Symbol]
     def __safe_memoize_defaults__: () -> Hash[Symbol, untyped]?
+    def __safe_memo_groups__: () -> Hash[Symbol, Array[Symbol]]
+    def __safe_memo_register_group__: (Symbol method_name, Symbol group) -> void
     def memoized_method_visibility: (Symbol method_name) -> Symbol
   end
 
@@ -114,6 +120,9 @@ module SafeMemoize
     def memo_age: (Symbol | String method_name, *untyped args, **untyped kwargs) -> Float?
     def memo_stale?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
     def reset_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
+    def reset_memo_group: (Symbol | String group_name) -> void
+    def memo_group_methods: (Symbol | String group_name) -> Array[Symbol]
+    def memo_groups: () -> Array[Symbol]
     def reset_all_memos: () -> void
     def memo_inspect: (Symbol | String method_name, *untyped args, **untyped kwargs) -> { cached: bool, value: untyped, hits: Integer, misses: Integer, ttl_remaining: Float?, age: Float?, custom_key: untyped, lru_position: Integer? }?
   end

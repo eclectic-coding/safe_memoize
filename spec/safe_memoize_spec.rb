@@ -1803,4 +1803,273 @@ RSpec.describe SafeMemoize do
       end
     end
   end
+
+  describe "memoization groups (group: option)" do
+    let(:klass) do
+      Class.new do
+        prepend SafeMemoize
+
+        attr_reader :calls
+
+        def initialize
+          @calls = Hash.new(0)
+        end
+
+        def fetch_user(id)
+          @calls[:fetch_user] += 1
+          "user_#{id}"
+        end
+
+        def fetch_post(id)
+          @calls[:fetch_post] += 1
+          "post_#{id}"
+        end
+
+        def compute
+          @calls[:compute] += 1
+          42
+        end
+
+        memoize :fetch_user, group: :database
+        memoize :fetch_post, group: :database
+        memoize :compute
+      end
+    end
+
+    let(:obj) { klass.new }
+
+    context "basic group invalidation" do
+      it "caches methods normally before reset" do
+        obj.fetch_user(1)
+        obj.fetch_user(1)
+        expect(obj.calls[:fetch_user]).to eq(1)
+      end
+
+      it "reset_memo_group invalidates all methods in the group" do
+        obj.fetch_user(1)
+        obj.fetch_post(2)
+        expect(obj.memoized?(:fetch_user, 1)).to be true
+        expect(obj.memoized?(:fetch_post, 2)).to be true
+
+        obj.reset_memo_group(:database)
+
+        expect(obj.memoized?(:fetch_user, 1)).to be false
+        expect(obj.memoized?(:fetch_post, 2)).to be false
+      end
+
+      it "does not affect methods outside the group" do
+        obj.compute
+        expect(obj.memoized?(:compute)).to be true
+
+        obj.reset_memo_group(:database)
+
+        expect(obj.memoized?(:compute)).to be true
+      end
+
+      it "recomputes values after group reset" do
+        obj.fetch_user(1)
+        obj.reset_memo_group(:database)
+        obj.fetch_user(1)
+
+        expect(obj.calls[:fetch_user]).to eq(2)
+      end
+
+      it "is a no-op for unknown groups" do
+        obj.fetch_user(1)
+        expect { obj.reset_memo_group(:nonexistent) }.not_to raise_error
+        expect(obj.memoized?(:fetch_user, 1)).to be true
+      end
+
+      it "accepts group names as strings" do
+        obj.fetch_user(1)
+        obj.reset_memo_group("database")
+        expect(obj.memoized?(:fetch_user, 1)).to be false
+      end
+    end
+
+    context "memo_group_methods" do
+      it "returns method names in the group" do
+        expect(obj.memo_group_methods(:database)).to match_array(%i[fetch_user fetch_post])
+      end
+
+      it "returns empty array for unknown group" do
+        expect(obj.memo_group_methods(:unknown)).to eq([])
+      end
+
+      it "accepts group name as string" do
+        expect(obj.memo_group_methods("database")).to match_array(%i[fetch_user fetch_post])
+      end
+    end
+
+    context "memo_groups" do
+      it "returns registered group names" do
+        expect(obj.memo_groups).to include(:database)
+      end
+
+      it "does not include groups from other classes" do
+        other = Class.new do
+          prepend SafeMemoize
+
+          def data = 1
+          memoize :data, group: :cache
+        end.new
+        expect(obj.memo_groups).not_to include(:cache)
+        expect(other.memo_groups).to include(:cache)
+      end
+    end
+
+    context "class-level safe_memo_group_methods / safe_memo_groups" do
+      it "safe_memo_group_methods returns method names" do
+        expect(klass.safe_memo_group_methods(:database)).to match_array(%i[fetch_user fetch_post])
+      end
+
+      it "safe_memo_groups returns group names" do
+        expect(klass.safe_memo_groups).to include(:database)
+      end
+    end
+
+    context "reset_shared_memo_group" do
+      let(:shared_klass) do
+        Class.new do
+          prepend SafeMemoize
+
+          def self.call_count
+            @call_count ||= Hash.new(0)
+          end
+
+          def users
+            self.class.call_count[:users] += 1
+            ["alice", "bob"]
+          end
+
+          def posts
+            self.class.call_count[:posts] += 1
+            ["post1", "post2"]
+          end
+
+          def config
+            self.class.call_count[:config] += 1
+            {timeout: 30}
+          end
+
+          memoize :users, shared: true, group: :api
+          memoize :posts, shared: true, group: :api
+          memoize :config, shared: true
+        end
+      end
+
+      it "clears all shared entries for the group" do
+        instance = shared_klass.new
+        instance.users
+        instance.posts
+        expect(shared_klass.shared_memoized?(:users)).to be true
+        expect(shared_klass.shared_memoized?(:posts)).to be true
+
+        shared_klass.reset_shared_memo_group(:api)
+
+        expect(shared_klass.shared_memoized?(:users)).to be false
+        expect(shared_klass.shared_memoized?(:posts)).to be false
+      end
+
+      it "does not affect shared methods outside the group" do
+        instance = shared_klass.new
+        instance.config
+        expect(shared_klass.shared_memoized?(:config)).to be true
+
+        shared_klass.reset_shared_memo_group(:api)
+
+        expect(shared_klass.shared_memoized?(:config)).to be true
+      end
+
+      it "is a no-op for unknown groups" do
+        expect { shared_klass.reset_shared_memo_group(:unknown) }.not_to raise_error
+      end
+    end
+
+    context "group: validation" do
+      it "raises ArgumentError for non-symbol/string group" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, group: 123
+          end
+        end.to raise_error(ArgumentError, /group: must be a Symbol or String/)
+      end
+
+      it "raises ArgumentError for empty string group" do
+        expect do
+          Class.new do
+            prepend SafeMemoize
+
+            def data = 1
+            memoize :data, group: ""
+          end
+        end.to raise_error(ArgumentError, /group: must not be empty/)
+      end
+    end
+
+    context "re-memoizing with a different group moves the method" do
+      it "removes method from old group and adds to new group" do
+        k = Class.new do
+          prepend SafeMemoize
+
+          def data = 1
+          memoize :data, group: :alpha
+          memoize :data, group: :beta
+        end
+
+        expect(k.safe_memo_group_methods(:alpha)).not_to include(:data)
+        expect(k.safe_memo_group_methods(:beta)).to include(:data)
+      end
+    end
+
+    context "safe_memoize_options with group:" do
+      it "applies the group to all subsequently memoized methods" do
+        k = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options group: :everything
+
+          def foo = 1
+          def bar = 2
+          memoize :foo
+          memoize :bar
+        end
+
+        expect(k.safe_memo_group_methods(:everything)).to match_array(%i[foo bar])
+      end
+
+      it "per-call group: overrides the class default" do
+        k = Class.new do
+          prepend SafeMemoize
+
+          safe_memoize_options group: :default_group
+
+          def foo = 1
+          def bar = 2
+          memoize :foo
+          memoize :bar, group: :special
+        end
+
+        expect(k.safe_memo_group_methods(:default_group)).to include(:foo)
+        expect(k.safe_memo_group_methods(:default_group)).not_to include(:bar)
+        expect(k.safe_memo_group_methods(:special)).to include(:bar)
+      end
+    end
+
+    context "on_evict hook fires on group reset" do
+      it "fires on_evict for each evicted entry" do
+        evicted = []
+        obj.fetch_user(1)
+        obj.fetch_post(2)
+        obj.on_memo_evict { |key, _| evicted << key }
+
+        obj.reset_memo_group(:database)
+
+        expect(evicted.length).to eq(2)
+      end
+    end
+  end
 end
