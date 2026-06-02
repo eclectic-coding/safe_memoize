@@ -8,8 +8,6 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-06-02
-
 ### Added
 
 - `group:` option on `memoize` — assigns a method to a named invalidation group (`memoize :find, group: :database`). Groups are stored on the class and survive re-memoization; a method can belong to at most one group at a time (re-memoizing with a different group moves it). Accepts any non-empty Symbol or String. Can be set as a class default via `safe_memoize_options group: :my_group`.
