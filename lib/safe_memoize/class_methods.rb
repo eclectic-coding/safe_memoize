@@ -69,6 +69,11 @@ module SafeMemoize
     #   {.reset_shared_memo_group} for shared-mode methods) to bust every method in the
     #   group at once. A method may belong to at most one group; re-memoizing with a
     #   different group moves it. Must be a non-empty Symbol or String.
+    # @param circuit_breaker [Boolean, Hash, nil] wraps the configured +store:+ adapter
+    #   in a {Stores::CircuitBreaker}. Pass +true+ to use defaults (+error_threshold: 5+,
+    #   +probe_interval: 30+), or a +Hash+ with +:error_threshold+ and/or +:probe_interval+
+    #   keys to customise. Requires a +store:+ to be set (per-method, class-level, or
+    #   global default); raises +ArgumentError+ otherwise.
     # @return [void]
     # @raise [ArgumentError] if the method does not exist, or option values are invalid
     #
@@ -89,7 +94,7 @@ module SafeMemoize
     # @example With a custom store
     #   STORE = SafeMemoize::Stores::Memory.new
     #   memoize :fetch, store: STORE, ttl: 300
-    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, group: UNSET, **extension_options)
+    def memoize(method_name, ttl: UNSET, max_size: UNSET, ttl_refresh: UNSET, if: UNSET, unless: UNSET, shared: UNSET, key: UNSET, store: UNSET, fiber_local: UNSET, ractor_safe: UNSET, namespace: UNSET, shared_cache: UNSET, cache_bust: UNSET, copy_on_read: UNSET, group: UNSET, circuit_breaker: UNSET, **extension_options)
       method_name = method_name.to_sym
 
       unless method_defined?(method_name) || private_method_defined?(method_name) || protected_method_defined?(method_name)
@@ -132,6 +137,7 @@ module SafeMemoize
         namespace = cls_defaults[:namespace] if namespace.equal?(UNSET) && cls_defaults.key?(:namespace)
         store = cls_defaults[:store] if store.equal?(UNSET) && cls_defaults.key?(:store)
         group = cls_defaults[:group] if group.equal?(UNSET) && cls_defaults.key?(:group)
+        circuit_breaker = cls_defaults[:circuit_breaker] if circuit_breaker.equal?(UNSET) && cls_defaults.key?(:circuit_breaker)
       end
 
       # Normalize remaining UNSET to original per-call defaults
@@ -148,6 +154,7 @@ module SafeMemoize
       cache_bust = nil if cache_bust.equal?(UNSET)
       copy_on_read = false if copy_on_read.equal?(UNSET)
       group = nil if group.equal?(UNSET)
+      circuit_breaker = nil if circuit_breaker.equal?(UNSET)
       cond_if = nil if cond_if.equal?(UNSET)
       cond_unless = nil if cond_unless.equal?(UNSET)
 
@@ -257,6 +264,19 @@ module SafeMemoize
             end
             effective_store = global_default
           end
+        end
+      end
+
+      if circuit_breaker
+        unless circuit_breaker == true || circuit_breaker.is_a?(Hash)
+          raise ArgumentError, "circuit_breaker: must be true or a Hash of options (got #{circuit_breaker.class})"
+        end
+        unless effective_store
+          raise ArgumentError, "circuit_breaker: requires a store: to be configured (no store is set for :#{method_name})"
+        end
+        unless effective_store.is_a?(Stores::CircuitBreaker)
+          cb_opts = circuit_breaker.is_a?(Hash) ? circuit_breaker : {}
+          effective_store = Stores::CircuitBreaker.new(effective_store, **cb_opts)
         end
       end
 

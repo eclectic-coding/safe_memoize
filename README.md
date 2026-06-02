@@ -80,6 +80,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Per-class default options via `safe_memoize_options` — set TTL, max size, copy-on-read, and other defaults for every `memoize` call on the class without repeating them](#per-class-default-options-safe_memoize_options)
 - [Copy-on-read via `copy_on_read: true` — returns a `dup`/`deep_dup` on every cache read to protect shared cached state from caller mutation](#copy-on-read)
 - [Cache invalidation groups via `group:` — tag related methods with a group name and bust them all with a single `reset_memo_group` call](#cache-invalidation-groups)
+- [Circuit breaker for external stores — `Stores::CircuitBreaker` wraps any store adapter and falls back to the per-instance cache when the store is down; configurable error threshold and probe interval](#circuit-breaker-for-external-stores)
 
 ## Installation
 
@@ -1448,6 +1449,90 @@ end
 
 [↑ Back to features](#features)
 
+## Circuit breaker for external stores
+
+`SafeMemoize::Stores::CircuitBreaker` wraps any `Stores::Base` adapter and silently falls back to the per-instance in-process cache when the external store is unavailable, rather than propagating exceptions to callers.
+
+### How it works
+
+The breaker moves through three states:
+
+| State | Behaviour |
+|---|---|
+| `:closed` | Normal — every call passes through to the wrapped store; consecutive errors are counted |
+| `:open` | Tripped — reads return `MISS` (triggering the per-instance fallback), writes are no-ops; no calls reach the store until the probe interval elapses |
+| `:half_open` | Probe — calls are let through; the first success closes the circuit; any failure re-opens it and resets the timer |
+
+Any successful call in `:closed` state resets the consecutive error counter, so transient blips do not accumulate toward the threshold.
+
+### Usage
+
+**Direct wrapping:**
+
+```ruby
+redis = SafeMemoize::Stores::CircuitBreaker.new(
+  MyRedisStore.new,
+  error_threshold: 5,   # trip after 5 consecutive failures (default)
+  probe_interval:  30   # wait 30 s before probing (default)
+)
+
+class CatalogService
+  prepend SafeMemoize
+
+  def products = fetch_from_redis
+  memoize :products, store: redis
+end
+```
+
+**Via the `circuit_breaker:` option** (auto-wraps the configured store):
+
+```ruby
+class CatalogService
+  prepend SafeMemoize
+
+  def products = fetch_from_redis
+  memoize :products, store: MyRedisStore.new, circuit_breaker: true
+
+  def orders = fetch_orders
+  memoize :orders,
+    store: MyRedisStore.new,
+    circuit_breaker: { error_threshold: 3, probe_interval: 60 }
+end
+```
+
+When the store raises, `products` falls back to the per-instance in-memory hash — callers see no exceptions and computation still runs once per instance until the circuit closes.
+
+### Introspection and manual control
+
+```ruby
+cb = SafeMemoize::Stores::CircuitBreaker.new(store)
+
+cb.state           # => :closed | :open | :half_open
+cb.open?           # => false
+cb.error_count     # => 0
+cb.error_threshold # => 5
+cb.probe_interval  # => 30.0
+cb.wrapped_store   # => the inner adapter
+cb.reset!          # manually close the circuit and clear error count
+```
+
+### Class-wide default
+
+```ruby
+class ApiService
+  prepend SafeMemoize
+  safe_memoize_options circuit_breaker: { error_threshold: 3, probe_interval: 15 }
+
+  def users  = http.get("/users")
+  def orders = http.get("/orders")
+
+  memoize :users,  store: redis
+  memoize :orders, store: redis   # both get the circuit breaker
+end
+```
+
+[↑ Back to features](#features)
+
 ## Per-class default options (`safe_memoize_options`)
 
 `safe_memoize_options` sets option defaults for every `memoize` call on the class, eliminating repetition when many methods share the same TTL, LRU cap, or other option. Per-call options still take precedence; class defaults take precedence over global `SafeMemoize.configure` defaults.
@@ -1686,6 +1771,7 @@ Anything **not** listed here — internal modules, private methods, `@__safe_mem
 | `cache_bust:` | `Proc \| Symbol \| nil` | `nil` | Version-token callable; invoked on the instance at each lookup; token is folded into the key; incompatible with `key:` |
 | `copy_on_read:` | `Boolean` | `false` | Return a `dup`/`deep_dup` of the cached value on every read; protects shared state from caller mutation; nil and frozen values pass through; incompatible with `ractor_safe:` |
 | `group:` | `Symbol \| String \| nil` | `nil` | Assigns the method to a named invalidation group; call `reset_memo_group` / `reset_shared_memo_group` to bust all methods in the group at once; a method belongs to at most one group |
+| `circuit_breaker:` | `true \| Hash \| nil` | `nil` | Wraps the configured `store:` in a `Stores::CircuitBreaker`; `true` uses defaults (`error_threshold: 5`, `probe_interval: 30`); pass a Hash to customise; requires a store to be set; does not double-wrap |
 | *(extension options)* | any | — | Unknown kwargs are validated against registered extensions; raise `ArgumentError` if unclaimed |
 
 ### `memoize_all` options (class method)
@@ -1703,7 +1789,7 @@ All `memoize` option keys above, plus:
 
 | Option key | Type | Default | Notes |
 |---|---|---|---|
-| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`, `group:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
+| any `memoize` key except mode-switches | — | — | Accepts `ttl:`, `max_size:`, `ttl_refresh:`, `if:`, `unless:`, `key:`, `cache_bust:`, `copy_on_read:`, `namespace:`, `store:`, `group:`, `circuit_breaker:`; raises `ArgumentError` for `shared:`, `fiber_local:`, `ractor_safe:`, `shared_cache:` |
 
 ### Instance methods (public)
 

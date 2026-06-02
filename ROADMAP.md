@@ -10,7 +10,7 @@ This document tracks the planned evolution of SafeMemoize through v1.0.0 and bey
 
 | Feature | Description | Status |
 |---|---|---|
-| Circuit breaker for external stores | When a `store:` adapter raises on `read` or `write`, automatically fall back to the per-instance in-process hash rather than propagating the exception; configurable error threshold and recovery probe interval | Planned |
+| Circuit breaker for external stores | When a `store:` adapter raises on `read` or `write`, automatically fall back to the per-instance in-process hash rather than propagating the exception; configurable error threshold and recovery probe interval | Shipped |
 
 ---
 
