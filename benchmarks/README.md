@@ -66,3 +66,5 @@ bundle exec ruby benchmarks/benchmark.rb
 ```
 
 Results vary by hardware, Ruby version, and GVL scheduling. Run on your own hardware for authoritative numbers.
+
+For a full recorded run with analysis, see [BENCHMARK.md](BENCHMARK.md).
