@@ -74,6 +74,7 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Releasing](#releasing)
 - [Public API and versioning guarantee](#public-api-and-versioning-guarantee)
 - [Ruby version support](#ruby-version-support)
+- [Benchmarks](benchmarks/BENCHMARK.md)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -1773,7 +1774,7 @@ Regular `memoize` (without `ractor_safe: true`) is **not Ractor-compatible**. Pa
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `bundle exec rspec` to run the tests. You can also run `bin/console` for an interactive prompt.
 
-To run the benchmark suite: `bundle exec ruby benchmarks/benchmark.rb`.
+To run the benchmark suite: `bundle exec ruby benchmarks/benchmark.rb`. Pre-recorded results and analysis are in [benchmarks/BENCHMARK.md](benchmarks/BENCHMARK.md).
 
 To generate API documentation locally: `bundle exec rake doc`. Output is written to `doc/` (gitignored). The online reference is published automatically to [RubyDoc.info](https://rubydoc.info/gems/safe_memoize) on every release. Install `memery` and `memo_wise` first if you want comparison columns against those gems.
 
