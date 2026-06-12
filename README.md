@@ -28,61 +28,55 @@ SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/fa
 
 SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name`, it creates an anonymous module with a wrapper method and prepends it onto your class. The wrapper calls `super` to invoke the original method and stores the result in a per-instance hash. Thread safety is achieved with a per-instance `Mutex` using double-check locking.
 
-## Features
+## Table of Contents
 
-- [Correctly memoizes `nil` and `false` return values](#nil-and-false-safety)
-- [Caches per unique arguments (positional and keyword)](#with-arguments)
-- [Thread-safe via double-check locking](#how-it-works)
-- [Simple `prepend` + `memoize` API](#usage)
-- [Preserves public, protected, and private method visibility](#works-with-private-methods)
-- [Supports targeted cache invalidation by argument combination](#cache-reset)
-- [Includes a `memoized?` helper for cache inspection](#cache-inspection)
-- [Includes a `memo_count` helper for cache size stats](#cache-inspection)
-- [Includes a `memo_keys` helper for inspecting cached signatures](#cache-inspection)
-- [Includes a `memo_values` helper for inspecting cached signatures and values](#cache-inspection)
-- [Optional TTL expiration support for cached entries](#ttl-expiration)
-- [Sliding window TTL via `ttl_refresh: true`](#sliding-window-ttl)
-- [Optional LRU cache size limit per method via `max_size:`](#lru-cache-size-limit)
-- [Conditional caching via `if:` and `unless:` predicates](#conditional-caching)
-- [Lifecycle hooks for hit, miss, eviction, and expiration events](#lifecycle-hooks)
-- [Per-instance cache metrics (hit rate, miss rate, computation time)](#cache-metrics)
-- [Cache warm-up, export, and restore (`warm_memo`, `dump_memo`, `load_memo`)](#cache-warm-up-and-persistence)
-- [Class-level shared cache via `shared: true` with optional LRU](#shared-cache)
-- [Bulk memoization via `memoize_all` (public, protected, and private)](#bulk-memoization)
-- [Custom cache key generation per method](#custom-cache-keys)
-- [TTL introspection via `memo_ttl_remaining`](#cache-inspection)
-- [Deep single-entry inspection via `memo_inspect`](#cache-inspection)
-- [`ArgumentError` at definition time when memoizing an undefined method](#basic-memoization)
-- [Hook error isolation — hook exceptions never propagate to callers](#lifecycle-hooks)
-- [Deprecation infrastructure for gem authors](#deprecation)
-- [Optional `ActiveSupport::Notifications` integration for Rails observability](#activesupportnotifications)
-- [Optional StatsD adapter for metrics pipelines](#statsd)
-- [Optional OpenTelemetry adapter for distributed tracing](#opentelemetry)
-- [Rails request-scope helpers for controllers and service objects](#rails-request-scope)
-- [Batch cache warm-up via `memo_preload`](#cache-warm-up-and-persistence)
-- [`on_memo_store` hook fires on every cache write](#lifecycle-hooks)
-- [Global default TTL and max size via `SafeMemoize.configure`](#global-configuration)
-- [`memo_touch` resets the expiry clock without recomputing](#ttl-expiration)
-- [`memo_refresh` force-recomputes and re-caches in one call](#cache-inspection)
-- [`memo_age` and `memo_stale?` for TTL introspection](#cache-inspection)
-- [Class-level `key:` option for shared cache key generation](#custom-cache-keys)
-- [`shared_memo_age` and `shared_memo_stale?` for shared cache TTL inspection](#shared-cache)
-- [Pluggable external cache stores — Redis, Rails.cache, or any custom adapter](#pluggable-cache-stores)
-- [Global default store via `Configuration#default_store`](#pluggable-cache-stores)
-- [`SafeMemoize::Adapters::ConcurrentRuby` — optional `concurrent-ruby` store with parallel-read locking](#concurrent-ruby-adapter)
-- [Class-level `.safe_memoize_store=` — set a per-class default store without touching global config](#class-level-default-store-safe_memoize_store)
-- [Fiber-local memoization via `fiber_local: true` — isolated per-fiber cache, no mutex, works with Async/Falcon](#fiber-local-memoization)
-- [Ractor-safe shared cache via `ractor_safe: true` — supervisor Ractor replaces the Mutex; worker Ractors can call the memoized method directly](#ractor-safe-shared-cache)
-- [Cache namespacing — per-method `namespace:`, class-level `.safe_memoize_namespace=`, and global `Configuration#namespace` for multi-tenant and versioned deployments](#cache-namespacing)
-- [Named shared caches via `shared_cache: "name"` — cross-class cache sharing backed by a globally-registered store](#named-shared-caches)
-- [Automatic cache busting via `cache_bust:` — version-token-based invalidation; works with ActiveRecord `updated_at` and any comparable value](#automatic-cache-busting)
-- [Plugin / extension architecture — `SafeMemoize::Extension` DSL for adding custom `memoize` options and global lifecycle handlers without monkey-patching](#plugin--extension-architecture)
-- [Per-class default options via `safe_memoize_options` — set TTL, max size, copy-on-read, and other defaults for every `memoize` call on the class without repeating them](#per-class-default-options-safe_memoize_options)
-- [Copy-on-read via `copy_on_read: true` — returns a `dup`/`deep_dup` on every cache read to protect shared cached state from caller mutation](#copy-on-read)
-- [Cache invalidation groups via `group:` — tag related methods with a group name and bust them all with a single `reset_memo_group` call](#cache-invalidation-groups)
-- [Circuit breaker for external stores — `Stores::CircuitBreaker` wraps any store adapter and falls back to the per-instance cache when the store is down; configurable error threshold and probe interval](#circuit-breaker-for-external-stores)
-- [Multi-level (L1/L2) caching — `Stores::Multilevel` or `store: [l1, l2]` shorthand; reads from the fastest layer first and promotes on miss](#multi-level-caching)
-- [Stampede protection — `stampede_protection:` option applies the XFetch algorithm to the per-instance cache; `Stores::XFetch` applies it to external stores](#stampede-protection)
+- [The Problem](#the-problem)
+- [How It Works](#how-it-works)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Basic memoization](#basic-memoization)
+  - [With arguments](#with-arguments)
+  - [Nil and false safety](#nil-and-false-safety)
+  - [Works with private methods](#works-with-private-methods)
+  - [Cache reset](#cache-reset)
+  - [Cache invalidation groups](#cache-invalidation-groups)
+  - [Lifecycle hooks](#lifecycle-hooks)
+  - [TTL expiration](#ttl-expiration)
+  - [Sliding window TTL](#sliding-window-ttl)
+  - [LRU cache size limit](#lru-cache-size-limit)
+  - [Conditional caching](#conditional-caching)
+  - [Cache warm-up and persistence](#cache-warm-up-and-persistence)
+  - [Shared cache](#shared-cache)
+  - [Fiber-local memoization](#fiber-local-memoization)
+  - [Bulk memoization](#bulk-memoization)
+  - [Custom cache keys](#custom-cache-keys)
+  - [Cache inspection](#cache-inspection)
+  - [Cache metrics](#cache-metrics)
+  - [Plugin / extension architecture](#plugin--extension-architecture)
+  - [Automatic cache busting](#automatic-cache-busting)
+  - [Named shared caches](#named-shared-caches)
+  - [Cache namespacing](#cache-namespacing)
+  - [Global configuration](#global-configuration)
+  - [ActiveSupport::Notifications](#activesupportnotifications)
+  - [StatsD](#statsd)
+  - [OpenTelemetry](#opentelemetry)
+  - [Rails request-scope](#rails-request-scope)
+  - [Pluggable cache stores](#pluggable-cache-stores)
+  - [Deprecation](#deprecation)
+- [Circuit breaker for external stores](#circuit-breaker-for-external-stores)
+- [Multi-level caching](#multi-level-caching)
+- [Stampede protection](#stampede-protection)
+- [Per-class default options](#per-class-default-options-safe_memoize_options)
+- [Copy-on-read](#copy-on-read)
+- [Ractor-safe shared cache](#ractor-safe-shared-cache)
+- [Ractor compatibility](#ractor-compatibility)
+- [Development](#development)
+- [Releasing](#releasing)
+- [Public API and versioning guarantee](#public-api-and-versioning-guarantee)
+- [Ruby version support](#ruby-version-support)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Installation
 
@@ -122,7 +116,7 @@ end
 
 Calling `memoize` on a method name that does not exist raises `ArgumentError` immediately at class definition time rather than at the first runtime call.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### With arguments
 
@@ -147,7 +141,7 @@ calc.compute(3, 4)  # computes and caches (different args)
 
 Argument arrays, hashes, and strings are deep-frozen into an independent copy when the cache key is built, so mutating arguments after a call cannot corrupt or miss a cached entry.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Nil and false safety
 
@@ -163,7 +157,7 @@ class Config
 end
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Works with private methods
 
@@ -184,7 +178,7 @@ class TokenProvider
 end
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Cache reset
 
@@ -196,7 +190,7 @@ obj.reset_memo(:search, "ruby", page: 2)       # Clears one positional/keyword c
 obj.reset_all_memos                             # Clears all memoized values
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Cache invalidation groups
 
@@ -269,7 +263,7 @@ end
 
 A method belongs to at most one group at a time; re-memoizing with a different `group:` moves it.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Lifecycle hooks
 
@@ -347,7 +341,7 @@ end
 
 Set `c.on_hook_error = :raise` to re-raise exceptions instead of swallowing them.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### TTL expiration
 
@@ -379,7 +373,7 @@ obj.memo_refresh(:current_quote)             # Recomputes and re-caches
 obj.memo_refresh(:find, 42)                  # Recomputes for one argument combination
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Sliding window TTL
 
@@ -398,7 +392,7 @@ end
 
 Without `ttl_refresh:`, the entry expires 300 seconds after it was first cached. With it, the clock resets on every read — the entry is evicted only if the method goes 300 seconds without being called. `ttl_refresh: true` requires `ttl:` to be set and works with both per-instance and `shared: true` memoization.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### LRU cache size limit
 
@@ -433,7 +427,7 @@ memoize :find, max_size: 50, ttl: 300
 
 The `on_evict` hook fires for LRU-evicted entries the same way it does for manual `reset_memo` calls.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Conditional caching
 
@@ -469,7 +463,7 @@ Both options accept any callable and compose with `ttl:` and `max_size:`:
 memoize :find, if: ->(result) { !result.nil? }, ttl: 60, max_size: 500
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Cache warm-up and persistence
 
@@ -535,7 +529,7 @@ obj.load_memo(Marshal.load(raw)) if raw
 
 Loaded entries have no TTL — they persist until explicitly reset. Expired entries are excluded from `dump_memo` output, so snapshots never contain stale data.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Shared cache
 
@@ -585,7 +579,7 @@ memoize :find, shared: true, max_size: 500
 
 Hooks (`on_memo_hit`, `on_memo_miss`, `on_memo_expire`, `on_memo_evict`) fire on the calling instance as usual.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Fiber-local memoization
 
@@ -627,7 +621,7 @@ obj.reset_all_fiber_memos                # clear all fiber-local entries for thi
 
 Lifecycle hooks and cache metrics work the same as for regular memoization. The existing `memoized?`, `reset_memo`, and `memo_count` methods operate on the instance-variable cache; use the `fiber_local_*` / `reset_fiber_*` API for fiber-local entries.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Bulk memoization
 
@@ -685,7 +679,7 @@ memoize_all include_protected: true, include_private: true
 
 Inherited methods are never affected regardless of visibility.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Custom cache keys
 
@@ -734,7 +728,7 @@ svc.clear_custom_keys(:generate)  # Remove generator for one method
 svc.clear_custom_keys             # Remove all custom key generators
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Cache inspection
 
@@ -780,7 +774,7 @@ obj.memo_inspect(:find, 42)
 
 Returns `nil` when the entry is not cached.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Cache metrics
 
@@ -810,7 +804,7 @@ obj.cache_metrics_reset(:find)    # Clears metrics for one method only
 
 Metrics are per-instance and reset independently from the cache itself — clearing metrics does not evict cached values.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Plugin / extension architecture
 
@@ -893,7 +887,7 @@ An extension does not need to `extend SafeMemoize::Extension`. Any object respon
 - Unknown `memoize` keywords raise `ArgumentError` unless a registered extension claims them — typos are still caught.
 - `on_cache_event` handlers run on the main Ractor only; they are silently skipped from worker Ractors.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Automatic cache busting
 
@@ -954,7 +948,7 @@ obj.reset_memo(:summary)      # clears ALL versions
 - Incompatible with `key:` — both define the cache key shape; raises `ArgumentError` at `memoize` time.
 - Composes with `namespace:`, `ttl:`, `if:`, `unless:`, and `shared_cache:`.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Named shared caches
 
@@ -1025,7 +1019,7 @@ memoize :find, shared_cache: "orders", namespace: "presenter"  # [:"presenter:fi
 - `register_shared_cache` must be called before the class that uses the name is defined.
 - Test suites should call `SafeMemoize.reset_shared_caches!` in an `after` hook to prevent state leaking between examples.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Cache namespacing
 
@@ -1086,7 +1080,7 @@ end
 - Namespacing works with all memoize paths (standard, `store:`, `fiber_local:`, `shared:`, `ractor_safe:`).
 - Adding or changing a namespace changes the cache keys, so existing entries become unreachable (they expire naturally or can be cleared by `reset_all_memos`).
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Global configuration
 
@@ -1107,7 +1101,7 @@ SafeMemoize.reset_configuration!
 
 The configure block also accepts `on_hook_error`, `on_deprecation`, `active_support_notifications`, `statsd_client`, `default_store`, and `namespace` (covered in [Hook error isolation](#hook-error-isolation), [Deprecation](#deprecation), [ActiveSupport::Notifications](#activesupportnotifications), [StatsD](#statsd), [Pluggable cache stores](#pluggable-cache-stores), and [Cache namespacing](#cache-namespacing)).
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### ActiveSupport::Notifications
 
@@ -1149,7 +1143,7 @@ end
 
 The integration is a no-op when ActiveSupport is not loaded — there is no overhead for non-Rails projects. `active_support_notifications` defaults to `false`.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### StatsD
 
@@ -1175,7 +1169,7 @@ Each call includes two tags: `method:method_name` and `class:ClassName`. The cli
 
 If the client raises, the error is rescued and a warning is emitted to stderr rather than propagated to the caller. `statsd_client` defaults to `nil` (disabled).
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### OpenTelemetry
 
@@ -1200,7 +1194,7 @@ SafeMemoize then wraps every cache miss (the actual method call, not cache hits)
 
 Cache hits produce no spans, so tracing overhead is zero for cached calls. The adapter is compatible with any tracer that responds to `in_span(name, attributes:, &block)` — the interface provided by `opentelemetry-sdk`, `opentelemetry-api`, and no-op tracers alike. If `opentelemetry_tracer` is `nil` (the default), the adapter is completely bypassed.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Rails request-scope
 
@@ -1269,7 +1263,7 @@ end
 
 `SafeMemoize::Rails::Middleware` calls `reset_all_memos` on every tracked instance in the current thread at the end of the request, even if the app raises. Tracking is thread-local, so concurrent requests never interfere. The tracked list is cleared automatically after each reset.
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Pluggable cache stores
 
@@ -1418,7 +1412,7 @@ A per-method `store:` option always takes precedence. Methods using `max_size:` 
 
 The `store:` option composes with `ttl:`, `ttl_refresh:`, `if:`, `unless:`, lifecycle hooks, and cache metrics. It is incompatible with `max_size:` (use the store adapter's own eviction) and `shared:` (raise `ArgumentError` if combined).
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ### Deprecation
 
@@ -1449,7 +1443,7 @@ SafeMemoize.configure do |c|
 end
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Circuit breaker for external stores
 
@@ -1533,7 +1527,7 @@ class ApiService
 end
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Multi-level caching
 
@@ -1572,7 +1566,7 @@ store   = SafeMemoize::Stores::Multilevel.new(SafeMemoize::Stores::Memory.new, s
 memoize :catalog, store: store, ttl: 300
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Stampede protection
 
@@ -1629,7 +1623,7 @@ store = SafeMemoize::Stores::XFetch.new(
 )
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Per-class default options (`safe_memoize_options`)
 
@@ -1668,7 +1662,7 @@ Call with no arguments to clear all class-level defaults:
 MyClass.safe_memoize_options   # clears — subsequent memoize calls use global config or per-call options only
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Copy-on-read
 
@@ -1706,7 +1700,7 @@ class ReportService
 end
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Ractor-safe shared cache
 
@@ -1761,7 +1755,7 @@ PriceService.reset_ractor_memo(:fetch_price)         # → clear all entries for
 PriceService.reset_all_ractor_memos                  # → clear entire shared cache
 ```
 
-[↑ Back to features](#features)
+[↑ Back to top](#table-of-contents)
 
 ## Ractor compatibility
 
