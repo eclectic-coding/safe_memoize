@@ -12,22 +12,6 @@ SafeMemoize is a production-ready, zero-dependency memoization library for Ruby.
 
 Beyond the basics, SafeMemoize ships with TTL expiration (including sliding window refresh via `ttl_refresh:`), LRU cache size capping, conditional caching via `if:`/`unless:` predicates, lifecycle hooks for cache hits, evictions, and expirations, per-instance metrics (hit rate, miss rate, average computation time), targeted and bulk cache invalidation, custom cache key generators, and rich introspection helpers (`memoized?`, `memo_count`, `memo_keys`, `memo_values`, `memo_ttl_remaining`). It preserves method visibility (public, protected, and private) and requires no runtime dependencies.
 
-## The Problem
-
-Ruby's common memoization pattern breaks with falsy values: 
-
-```ruby
-def user
-  @user ||= find_user  # Re-runs find_user every time it returns nil!
-end
-```
-
-SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/false", so your methods are only computed once regardless of return value.
-
-## How It Works
-
-SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name`, it creates an anonymous module with a wrapper method and prepends it onto your class. The wrapper calls `super` to invoke the original method and stores the result in a per-instance hash. Thread safety is achieved with a per-instance `Mutex` using double-check locking.
-
 ## Table of Contents
 
 - [The Problem](#the-problem)
@@ -78,6 +62,22 @@ SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
+
+## The Problem
+
+Ruby's common memoization pattern breaks with falsy values: 
+
+```ruby
+def user
+  @user ||= find_user  # Re-runs find_user every time it returns nil!
+end
+```
+
+SafeMemoize uses `Hash#key?` to distinguish "not yet cached" from "cached nil/false", so your methods are only computed once regardless of return value.
+
+## How It Works
+
+SafeMemoize uses Ruby's `prepend` mechanism. When you call `memoize :method_name`, it creates an anonymous module with a wrapper method and prepends it onto your class. The wrapper calls `super` to invoke the original method and stores the result in a per-instance hash. Thread safety is achieved with a per-instance `Mutex` using double-check locking.
 
 ## Installation
 
