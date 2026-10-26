@@ -55,6 +55,12 @@ jobs:
       - name: Run test suite
         run: bundle exec rake spec
 
+      # SimpleCov marks :nocov: lines as "ignored"; Codecov rejects non-numeric
+      # line values and discards the whole report, so treat them as non-lines.
+      - name: Normalize ignored lines for Codecov
+        if: matrix.ruby == '3.4'
+        run: sed -i 's/"ignored"/null/g' coverage/coverage.json
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         if: matrix.ruby == '3.4'
