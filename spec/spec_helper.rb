@@ -12,6 +12,10 @@ SimpleCov.start do
   track_files "lib/**/*.rb"
 end
 
+# ractor_safe: true is built on Ractor, which Ruby flags as experimental; the
+# warning is noise in the test output.
+Warning[:experimental] = false
+
 require "safe_memoize"
 require "safe_memoize/stores/redis"
 require "safe_memoize/stores/rails_cache"
