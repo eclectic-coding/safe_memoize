@@ -21,15 +21,37 @@ module SafeMemoize
   module RactorSharedMethods
     MUTEX_KEY = :__safe_memo_ractor_mutex__
 
+    # Ruby 4.0 replaced +Ractor.receive_if+ with +Ractor::Port+.
+    PORTS = defined?(Ractor::Port) ? true : false
+
     # Sends a request to +supervisor+ and blocks until its reply arrives,
     # returning the reply payload.
-    #
-    # Replies are matched by thread identity, but every thread in a Ractor waits
-    # on that Ractor's single incoming queue. Ruby 3.x can lose a wakeup when
-    # several threads sit in +Ractor.receive_if+ at once, leaving one waiting
-    # forever, so the send/receive pair is serialized per Ractor. The supervisor
-    # handles requests one at a time anyway, so this costs no throughput.
     def self.round_trip(supervisor, op, *args)
+      # :nocov:
+      return round_trip_via_port(supervisor, op, *args) if PORTS
+      # :nocov:
+
+      round_trip_via_queue(supervisor, op, *args)
+    end
+
+    # Ruby 4.0+: each call gets its own port, so callers never share a queue.
+    # :nocov:
+    def self.round_trip_via_port(supervisor, op, *args)
+      port = Ractor::Port.new
+      supervisor.send(Ractor.make_shareable([port, Thread.current.object_id, op, *args]))
+      port.receive[1]
+    ensure
+      port&.close
+    end
+    # :nocov:
+
+    # Ruby 3.x: replies are matched by thread identity, but every thread in a
+    # Ractor waits on that Ractor's single incoming queue. Ruby 3.x can lose a
+    # wakeup when several threads sit in +Ractor.receive_if+ at once, leaving one
+    # waiting forever, so the send/receive pair is serialized per Ractor. The
+    # supervisor handles requests one at a time anyway, so this costs no
+    # throughput.
+    def self.round_trip_via_queue(supervisor, op, *args)
       tag = Thread.current.object_id
       msg = Ractor.make_shareable([Ractor.current, tag, op, *args])
 

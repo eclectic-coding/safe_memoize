@@ -2,10 +2,13 @@
 
 require "spec_helper"
 
+# Ruby 4.0 removed Ractor#take in favour of Ractor#value.
+RACTOR_RESULT_METHOD = defined?(Ractor) && (Ractor.method_defined?(:value) ? :value : :take)
+
 RACTOR_SAFE_SUPPORTED =
   defined?(Ractor) &&
   RUBY_VERSION >= "3.0.0" &&
-  Ractor.method_defined?(:take)
+  !RACTOR_RESULT_METHOD.nil?
 
 RSpec.describe "SafeMemoize ractor_safe: true" do
   before { skip "Ractor not available on this Ruby" unless RACTOR_SAFE_SUPPORTED }
@@ -521,8 +524,6 @@ RSpec.describe "SafeMemoize ractor_safe: true" do
   # ─────────────────────────────────────────────────────────────
 
   describe "worker Ractor access" do
-    before { skip "Ractor#take not available" unless Ractor.method_defined?(:take) }
-
     it "allows a worker Ractor to call the memoized method" do
       klass = Class.new do
         prepend SafeMemoize
@@ -531,7 +532,7 @@ RSpec.describe "SafeMemoize ractor_safe: true" do
         memoize :compute, shared: true, ractor_safe: true
       end
 
-      result = Ractor.new(klass) { |k| k.new.compute }.take
+      result = Ractor.new(klass) { |k| k.new.compute }.public_send(RACTOR_RESULT_METHOD)
       expect(result).to eq(42)
     ensure
       klass.reset_all_ractor_memos
@@ -545,7 +546,7 @@ RSpec.describe "SafeMemoize ractor_safe: true" do
         memoize :compute, shared: true, ractor_safe: true
       end
 
-      expect { Ractor.new(klass) { |k| k.new.compute }.take }.not_to raise_error
+      expect { Ractor.new(klass) { |k| k.new.compute }.public_send(RACTOR_RESULT_METHOD) }.not_to raise_error
     ensure
       klass.reset_all_ractor_memos
     end
@@ -559,7 +560,7 @@ RSpec.describe "SafeMemoize ractor_safe: true" do
       end
 
       klass.new.compute
-      result = Ractor.new(klass) { |k| k.new.compute }.take
+      result = Ractor.new(klass) { |k| k.new.compute }.public_send(RACTOR_RESULT_METHOD)
       expect(result).to eq(42)
       expect(klass.ractor_memo_count(:compute)).to eq(1)
     ensure
@@ -575,7 +576,7 @@ RSpec.describe "SafeMemoize ractor_safe: true" do
       end
 
       ractors = 4.times.map { Ractor.new(klass) { |k| k.new.compute } }
-      results = ractors.map(&:take)
+      results = ractors.map(&RACTOR_RESULT_METHOD)
       expect(results).to all eq(99)
     ensure
       klass.reset_all_ractor_memos
