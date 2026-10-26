@@ -75,7 +75,9 @@ jobs:
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          url="https://api.codecov.io/api/v2/github/${{ github.repository }}/commits/${SHA}/"
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          url="https://api.codecov.io/api/v2/github/${owner}/repos/${repo}/commits/${SHA}/"
           for attempt in $(seq 1 18); do
             state=$(curl -fsS "$url" | jq -r '.state' || true)
             echo "Codecov state for ${SHA}: ${state:-unknown} (attempt ${attempt})"
