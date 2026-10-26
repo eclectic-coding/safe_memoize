@@ -10,6 +10,7 @@ module SafeMemoize
     VERSION_PATTERN = /VERSION = "[^"]+"/
     SEMVER_PATTERN = /\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?\z/
     UNRELEASED_HEADING = "## [Unreleased]"
+    UNRELEASED_LINK = %r{^\[Unreleased\]: (?<base>\S+)/compare/v(?<previous>[^.\s]\S*?)\.\.\.HEAD$}
 
     def normalize_version(version)
       normalized_version = version.to_s.sub(/\Av/, "")
@@ -43,7 +44,24 @@ module SafeMemoize
         raise ArgumentError, "CHANGELOG.md already contains #{normalized_version}"
       end
 
-      contents.sub(UNRELEASED_HEADING, "#{UNRELEASED_HEADING}\n\n#{release_heading}")
+      contents = contents.sub(UNRELEASED_HEADING, "#{UNRELEASED_HEADING}\n\n#{release_heading}")
+      update_version_links(contents, normalized_version)
+    end
+
+    # Keeps the reference-style link definitions at the bottom of the CHANGELOG
+    # in sync: points [Unreleased] at the new tag and adds a compare link for
+    # the new version. Left untouched when no [Unreleased] link is present.
+    def update_version_links(contents, version)
+      match = contents.match(UNRELEASED_LINK)
+      return contents unless match
+
+      base = match[:base]
+      replacement = [
+        "[Unreleased]: #{base}/compare/v#{version}...HEAD",
+        "[#{version}]: #{base}/compare/v#{match[:previous]}...v#{version}"
+      ].join("\n")
+
+      contents.sub(UNRELEASED_LINK) { replacement }
     end
 
     # Removes milestone sections from ROADMAP.md where every feature row has
