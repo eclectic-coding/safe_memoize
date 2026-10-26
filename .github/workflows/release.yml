@@ -69,7 +69,7 @@ jobs:
 
       - name: Configure RubyGems credentials (trusted publishing)
         if: steps.rubygems.outputs.already_published != 'true'
-        uses: rubygems/configure-rubygems-credentials@v1.0.0
+        uses: rubygems/configure-rubygems-credentials@v2.1.0
 
       - name: Publish gem to RubyGems
         if: steps.rubygems.outputs.already_published != 'true'
