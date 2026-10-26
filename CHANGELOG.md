@@ -8,6 +8,10 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+### Fixed
+
+- `ractor_safe: true` could hang forever on Ruby 3.x when several threads in the same Ractor called memoized methods (or `reset_all_ractor_memos` and friends) at once. Ruby can lose a wakeup when multiple threads wait in `Ractor.receive_if` on the Ractor's single incoming queue, leaving one caller blocked indefinitely. Each request/reply round trip to the supervisor is now serialized per Ractor; throughput is unchanged since the supervisor already handles requests one at a time. Note that `ractor_safe: true` still does not work on Ruby 4.0, which removed `Ractor.receive_if`.
+
 ## [1.7.0] - 2026-06-02
 
 ### Added

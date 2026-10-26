@@ -260,6 +260,48 @@ RSpec.describe "SafeMemoize ractor_safe: true" do
     ensure
       klass.reset_all_ractor_memos
     end
+
+    # Regression: without per-Ractor serialization of the send/receive pair,
+    # Ruby 3.x can lose a Ractor.receive_if wakeup and leave a thread blocked
+    # forever (it took a few dozen iterations to hit). The deadlock also stops
+    # in-process timeouts from firing, so the stress loop runs in a child
+    # process that is killed if it does not finish.
+    it "does not hang when many threads wait on the supervisor at once" do
+      script = <<~RUBY
+        require "safe_memoize"
+        Warning[:experimental] = false
+
+        300.times do
+          klass = Class.new do
+            prepend SafeMemoize
+
+            def fetch(n) = n * 2
+            memoize :fetch, shared: true, ractor_safe: true
+          end
+
+          results = 10.times.map { |i| Thread.new { klass.new.fetch(i % 3) } }.map(&:value)
+          raise "unexpected results: \#{results.inspect}" unless results.all? { |r| [0, 2, 4].include?(r) }
+          klass.reset_all_ractor_memos
+        end
+      RUBY
+
+      lib = File.expand_path("../lib", __dir__)
+      pid = Process.spawn(RbConfig.ruby, "-I", lib, "-e", script, out: File::NULL, err: File::NULL)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60
+      status = nil
+
+      while status.nil? && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+        _, status = Process.wait2(pid, Process::WNOHANG)
+        sleep 0.1 if status.nil?
+      end
+
+      if status.nil?
+        Process.kill("KILL", pid)
+        Process.wait(pid)
+      end
+
+      expect(status&.success?).to be(true), "stress process hung or failed"
+    end
   end
 
   # ─────────────────────────────────────────────────────────────
