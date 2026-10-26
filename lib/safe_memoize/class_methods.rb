@@ -958,9 +958,7 @@ module SafeMemoize
 
             cache_key = Ractor.make_shareable([method_name, deep_freeze_copy(args), deep_freeze_copy(kwargs)])
 
-            tag = Thread.current.object_id
-            supervisor.send(Ractor.make_shareable([Ractor.current, tag, :fetch, cache_key]))
-            response = Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
+            response = RactorSharedMethods.round_trip(supervisor, :fetch, cache_key)
 
             if response[:hit]
               record_cache_hit(cache_key)
@@ -985,8 +983,7 @@ module SafeMemoize
               cached_at: now
             })
 
-            supervisor.send(Ractor.make_shareable([Ractor.current, tag, :store, cache_key, record]))
-            stored = Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
+            stored = RactorSharedMethods.round_trip(supervisor, :store, cache_key, record)
             stored_record = stored[:stored]
 
             record_cache_miss(cache_key, elapsed_time)

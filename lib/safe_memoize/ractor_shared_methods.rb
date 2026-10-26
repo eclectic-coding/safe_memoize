@@ -15,9 +15,43 @@ module SafeMemoize
   # - +if:+, +unless:+, +max_size:+, +ttl_refresh:+, +key:+, and +store:+ are
   #   incompatible and raise +ArgumentError+ at +memoize+ time.
   # - When calling a ractor-safe memoized method from the main Ractor with multiple
-  #   threads, responses are matched by thread identity so concurrent callers do not
-  #   consume each other's replies.
+  #   threads, responses are matched by thread identity and each send/receive pair
+  #   is serialized per Ractor, so concurrent callers do not consume each other's
+  #   replies or lose a wakeup.
   module RactorSharedMethods
+    MUTEX_KEY = :__safe_memo_ractor_mutex__
+
+    # Sends a request to +supervisor+ and blocks until its reply arrives,
+    # returning the reply payload.
+    #
+    # Replies are matched by thread identity, but every thread in a Ractor waits
+    # on that Ractor's single incoming queue. Ruby 3.x can lose a wakeup when
+    # several threads sit in +Ractor.receive_if+ at once, leaving one waiting
+    # forever, so the send/receive pair is serialized per Ractor. The supervisor
+    # handles requests one at a time anyway, so this costs no throughput.
+    def self.round_trip(supervisor, op, *args)
+      tag = Thread.current.object_id
+      msg = Ractor.make_shareable([Ractor.current, tag, op, *args])
+
+      ractor_mutex.synchronize do
+        supervisor.send(msg)
+        Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
+      end
+    end
+
+    # Per-Ractor mutex held in Ractor-local storage (a plain +Mutex+ constant is
+    # not Ractor-shareable).
+    def self.ractor_mutex
+      Ractor.current[MUTEX_KEY] ||
+        if Ractor.respond_to?(:store_if_absent)
+          Ractor.store_if_absent(MUTEX_KEY) { Mutex.new }
+        else
+          # :nocov:
+          Ractor.current[MUTEX_KEY] ||= Mutex.new # Ruby 3.3 lacks store_if_absent
+          # :nocov:
+        end
+    end
+
     # Clears one or all entries from the Ractor-safe shared cache.
     #
     # @param method_name [Symbol, String]
@@ -76,13 +110,8 @@ module SafeMemoize
     private
 
     # Sends a message to the supervisor and blocks until the tagged response arrives.
-    # Uses Thread.current.object_id as a per-call tag so concurrent threads in the
-    # main Ractor do not steal each other's replies.
     def __ractor_cache_send__(supervisor, op, *args)
-      tag = Thread.current.object_id
-      msg = Ractor.make_shareable([Ractor.current, tag, op, *args])
-      supervisor.send(msg)
-      Ractor.receive_if { |m| m.is_a?(Array) && m[0] == tag }[1]
+      RactorSharedMethods.round_trip(supervisor, op, *args)
     end
 
     # Creates the supervisor Ractor that owns this class's Ractor-safe shared cache.

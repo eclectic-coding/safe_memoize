@@ -251,6 +251,11 @@ module SafeMemoize
   end
 
   module RactorSharedMethods
+    MUTEX_KEY: Symbol
+
+    def self.round_trip: (untyped supervisor, Symbol op, *untyped args) -> untyped
+    def self.ractor_mutex: () -> Thread::Mutex
+
     def reset_ractor_memo: (Symbol | String method_name, *untyped args, **untyped kwargs) -> void
     def reset_all_ractor_memos: () -> void
     def ractor_memoized?: (Symbol | String method_name, *untyped args, **untyped kwargs) -> bool
