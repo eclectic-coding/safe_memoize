@@ -68,3 +68,25 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/coverage.json
 
+      # The upload step succeeds even when Codecov later fails to process the
+      # report (state "error", 0% coverage), so poll the API and fail loudly.
+      - name: Verify Codecov processed the report
+        if: matrix.ruby == '3.4' && github.event.pull_request.head.repo.fork != true
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          url="https://api.codecov.io/api/v2/github/${owner}/repos/${repo}/commits/${SHA}/"
+          for attempt in $(seq 1 18); do
+            state=$(curl -fsS "$url" | jq -r '.state' || true)
+            echo "Codecov state for ${SHA}: ${state:-unknown} (attempt ${attempt})"
+            case "$state" in
+              complete) exit 0 ;;
+              error)
+                echo "::error::Codecov failed to process the coverage report for ${SHA}"
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::warning::Timed out waiting for Codecov to process ${SHA}"
