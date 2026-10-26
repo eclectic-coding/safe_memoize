@@ -64,6 +64,37 @@ RSpec.describe SafeMemoize::ReleaseTooling do
       MARKDOWN
     end
 
+    it "updates the Unreleased link and adds a compare link for the new version" do
+      contents = <<~MARKDOWN
+        ## [Unreleased]
+
+        - Add release automation
+
+        ## [0.1.0] - 2026-02-26
+
+        - Initial release
+
+        [Unreleased]: https://github.com/example/repo/compare/v0.1.0...HEAD
+        [0.1.0]: https://github.com/example/repo/releases/tag/v0.1.0
+      MARKDOWN
+
+      expect(described_class.finalize_changelog(contents, "0.2.0", date)).to eq(<<~MARKDOWN)
+        ## [Unreleased]
+
+        ## [0.2.0] - 2026-05-13
+
+        - Add release automation
+
+        ## [0.1.0] - 2026-02-26
+
+        - Initial release
+
+        [Unreleased]: https://github.com/example/repo/compare/v0.2.0...HEAD
+        [0.2.0]: https://github.com/example/repo/compare/v0.1.0...v0.2.0
+        [0.1.0]: https://github.com/example/repo/releases/tag/v0.1.0
+      MARKDOWN
+    end
+
     it "raises ArgumentError when the changelog has no Unreleased heading" do
       expect { described_class.finalize_changelog("## [0.1.0] - 2026-01-01\n", "0.2.0", date) }
         .to raise_error(ArgumentError, "CHANGELOG.md must contain an Unreleased heading")
