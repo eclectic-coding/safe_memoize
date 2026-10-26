@@ -24,4 +24,7 @@ YARD::Rake::YardocTask.new(:doc) do |t|
   t.options = ["--fail-on-warning"]
 end
 
-task default: %i[spec standard]
+require "bundler/audit/task"
+Bundler::Audit::Task.new
+
+task default: %i[bundle:audit:update bundle:audit:check spec standard]
