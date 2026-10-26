@@ -268,7 +268,17 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 - Initial release
 
-[Unreleased]: https://github.com/eclectic-coding/safe_memoize/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/eclectic-coding/safe_memoize/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/eclectic-coding/safe_memoize/compare/v0.9.0...v1.0.0
+[0.9.0]: https://github.com/eclectic-coding/safe_memoize/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/eclectic-coding/safe_memoize/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/eclectic-coding/safe_memoize/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/eclectic-coding/safe_memoize/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/eclectic-coding/safe_memoize/compare/v0.6.1...v0.6.2
