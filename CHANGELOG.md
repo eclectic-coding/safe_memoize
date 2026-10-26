@@ -8,6 +8,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-26
+
 ### Fixed
 
 - `ractor_safe: true` could hang forever on Ruby 3.x when several threads in the same Ractor called memoized methods (or `reset_all_ractor_memos` and friends) at once. Ruby can lose a wakeup when multiple threads wait in `Ractor.receive_if` on the Ractor's single incoming queue, leaving one caller blocked indefinitely. Each request/reply round trip to the supervisor is now serialized per Ractor; throughput is unchanged since the supervisor already handles requests one at a time.
@@ -273,7 +275,8 @@ from v1.0.0 onwards. Prior 0.x releases may include breaking changes between min
 
 - Initial release
 
-[Unreleased]: https://github.com/eclectic-coding/safe_memoize/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/eclectic-coding/safe_memoize/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/eclectic-coding/safe_memoize/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/eclectic-coding/safe_memoize/compare/v1.4.0...v1.5.0
