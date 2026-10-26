@@ -40,12 +40,17 @@ RSpec.describe "SafeMemoize Ractor compatibility" do
   # Helper — run a block in a Ractor and return the error it raises,
   # or nil if it unexpectedly succeeds.
   def ractor_error(shareable_args, &block)
+    # The failures are expected; keep Ruby from printing each one to stderr.
+    previous = Thread.report_on_exception
+    Thread.report_on_exception = false
     Ractor.new(shareable_args, &block).take
     nil
   rescue Ractor::RemoteError => e
     e.cause
   rescue => e
     e
+  ensure
+    Thread.report_on_exception = previous
   end
 
   describe "per-instance memoization (fast path)" do
