@@ -1722,7 +1722,7 @@ end
 20.times.map { Thread.new { PriceService.new.fetch_price(42) } }.map(&:value)
 
 # Worker Ractors also read from and write to the same supervisor cache
-result = Ractor.new(PriceService) { |s| s.new.fetch_price(42) }.take
+result = Ractor.new(PriceService) { |s| s.new.fetch_price(42) }.value  # .take on Ruby 3.x
 ```
 
 ### How it works
@@ -1730,7 +1730,7 @@ result = Ractor.new(PriceService) { |s| s.new.fetch_price(42) }.take
 - A **supervisor `Ractor`** is created once per class the first time a `ractor_safe: true` method is memoized. It owns a plain Ruby `Hash` and responds to `:fetch`, `:store`, `:delete_all`, `:delete_one`, `:clear`, `:memoized`, and `:count` messages.
 - The memoize **wrapper Proc** is frozen via `Ractor.make_shareable` before being registered with `define_method`, so the class can be passed directly into `Ractor.new` blocks.
 - Cached values are deep-frozen via `Ractor.make_shareable`. Values that cannot be made shareable (e.g. a `Mutex`) raise `ArgumentError`.
-- **Thread safety** inside the main Ractor (multiple threads) is handled by per-call tags (`Thread.current.object_id`) combined with `Ractor.receive_if`, so concurrent threads never consume each other's replies.
+- **Thread safety** inside the main Ractor (multiple threads): on Ruby 4.0+ each call replies through its own `Ractor::Port`, so callers never share a queue. On Ruby 3.x, replies are matched by per-call tags (`Thread.current.object_id`) with `Ractor.receive_if`, and each send/receive pair is serialized per Ractor because concurrent `receive_if` waiters can otherwise lose a wakeup and hang.
 - `ttl:` is supported. Expired entries are skipped by the supervisor's `:fetch` handler.
 
 ### Constraints
