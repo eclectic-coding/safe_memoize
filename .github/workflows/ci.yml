@@ -69,7 +69,7 @@ jobs:
         run: sed -i 's/"ignored"/null/g' coverage/coverage.json
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: matrix.ruby == '3.4' && github.event.pull_request.user.login != 'dependabot[bot]'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
