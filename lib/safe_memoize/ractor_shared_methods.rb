@@ -27,15 +27,15 @@ module SafeMemoize
     # Sends a request to +supervisor+ and blocks until its reply arrives,
     # returning the reply payload.
     def self.round_trip(supervisor, op, *args)
-      # :nocov:
+      # simplecov:disable
       return round_trip_via_port(supervisor, op, *args) if PORTS
-      # :nocov:
+      # simplecov:enable
 
       round_trip_via_queue(supervisor, op, *args)
     end
 
     # Ruby 4.0+: each call gets its own port, so callers never share a queue.
-    # :nocov:
+    # simplecov:disable
     def self.round_trip_via_port(supervisor, op, *args)
       port = Ractor::Port.new
       supervisor.send(Ractor.make_shareable([port, Thread.current.object_id, op, *args]))
@@ -43,7 +43,7 @@ module SafeMemoize
     ensure
       port&.close
     end
-    # :nocov:
+    # simplecov:enable
 
     # Ruby 3.x: replies are matched by thread identity, but every thread in a
     # Ractor waits on that Ractor's single incoming queue. Ruby 3.x can lose a
@@ -68,9 +68,9 @@ module SafeMemoize
         if Ractor.respond_to?(:store_if_absent)
           Ractor.store_if_absent(MUTEX_KEY) { Mutex.new }
         else
-          # :nocov:
+          # simplecov:disable
           Ractor.current[MUTEX_KEY] ||= Mutex.new # Ruby 3.3 lacks store_if_absent
-          # :nocov:
+          # simplecov:enable
         end
     end
 
@@ -139,7 +139,7 @@ module SafeMemoize
     # Creates the supervisor Ractor that owns this class's Ractor-safe shared cache.
     # Must be called from the main Ractor at class-definition time.
     def __safe_memo_ractor_supervisor__
-      # :nocov:
+      # simplecov:disable
       @__safe_memo_ractor_supervisor__ ||= Ractor.new do
         cache = {}
 
@@ -191,7 +191,7 @@ module SafeMemoize
           caller_ractor.send(response)
         end
       end
-      # :nocov:
+      # simplecov:enable
     end
   end
 end
