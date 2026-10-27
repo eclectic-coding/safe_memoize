@@ -60,13 +60,17 @@ jobs:
 
       # SimpleCov marks :nocov: lines as "ignored"; Codecov rejects non-numeric
       # line values and discards the whole report, so treat them as non-lines.
+      # Dependabot-triggered runs get no CODECOV_TOKEN (repo secrets are withheld
+      # from them) and Codecov rejects tokenless uploads to a protected branch,
+      # so the three Codecov steps are skipped for Dependabot PRs. The guard is
+      # on the PR author so `@dependabot rebase` re-runs stay skipped.
       - name: Normalize ignored lines for Codecov
-        if: matrix.ruby == '3.4'
+        if: matrix.ruby == '3.4' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: sed -i 's/"ignored"/null/g' coverage/coverage.json
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
-        if: matrix.ruby == '3.4'
+        if: matrix.ruby == '3.4' && github.event.pull_request.user.login != 'dependabot[bot]'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/coverage.json
@@ -74,7 +78,7 @@ jobs:
       # The upload step succeeds even when Codecov later fails to process the
       # report (state "error", 0% coverage), so poll the API and fail loudly.
       - name: Verify Codecov processed the report
-        if: matrix.ruby == '3.4' && github.event.pull_request.head.repo.fork != true
+        if: matrix.ruby == '3.4' && github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.fork != true
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
