@@ -3,7 +3,12 @@ updates:
   - package-ecosystem: bundler
     directory: "/"
     schedule:
-      interval: weekly
+      # Daily, to match the daily scheduled audit: a weekly cadence left new
+      # advisories failing the audit for days before a fix PR appeared.
+      interval: daily
+    # Also bump transitive gems (rack, nokogiri, ...); advisories there fail the audit.
+    allow:
+    - dependency-type: all
     groups:
       bundler-minor-and-patch:
         update-types:
